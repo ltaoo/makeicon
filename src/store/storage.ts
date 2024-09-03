@@ -7,9 +7,8 @@ const DEFAULT_CACHE_VALUES = {
     token: "",
     avatar: "",
   },
-  jobs: [] as string[],
 };
-const key = "a_global";
+const key = "global";
 const e = globalThis.localStorage.getItem(key);
 export const storage = new StorageCore<typeof DEFAULT_CACHE_VALUES>({
   key,

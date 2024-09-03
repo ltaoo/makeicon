@@ -2,7 +2,7 @@
  * @file 应用实例，也可以看作启动入口，优先会执行这里的代码
  * 应该在这里进行一些初始化操作、全局状态或变量的声明
  */
-import { media_request } from "@/biz/requests";
+import { request } from "@/biz/requests";
 import { UserCore } from "@/biz/user/index";
 import { ListCore } from "@/domains/list/index";
 import { ImageCore } from "@/domains/ui/index";
@@ -22,8 +22,11 @@ import { PageKeys, routes, routesWithPathname } from "./routes";
 import { client } from "./request";
 import { storage } from "./storage";
 
+export { client, storage };
+export type { PageKeys };
+
 if (window.location.hostname === "media-t.funzm.com") {
-  media_request.setEnv("dev");
+  request.setEnv("dev");
 }
 onRequestCreated((ins) => {
   ins.onFailed((e) => {
@@ -73,7 +76,7 @@ export const app = new Application({
   async beforeReady() {
     const { pathname, query } = history.$router;
     const route = routesWithPathname[pathname];
-    console.log("[ROOT]onMount", pathname, route, app.$user.isLogin);
+    console.log("[STORE]index", pathname, route, app.$user.isLogin);
     if (!route) {
       history.push("root.notfound");
       return Result.Ok(null);
@@ -83,9 +86,10 @@ export const app = new Application({
         history.push(route.name, query, { ignore: true });
         return Result.Ok(null);
       }
-      return Result.Err("can't goto layout");
+      history.push("root.home_layout.index");
+      return Result.Ok(null);
     }
-    console.log("[STORE]beforeReady - before if (!app.$user.isLogin", app.$user.isLogin);
+    console.log("[STORE]index - before if (!app.$user.isLogin", app.$user.isLogin);
     // if (!app.$user.isLogin) {
     //   app.tip({
     //     text: ["请先登录"],
@@ -148,7 +152,7 @@ user.onLogin((profile) => {
   client.appendHeaders({
     Authorization: user.token,
   });
-  media_request.appendHeaders({
+  request.appendHeaders({
     Authorization: user.token,
   });
   history.push("root.home_layout.index");

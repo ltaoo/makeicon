@@ -1,4 +1,4 @@
-import { media_request } from "@/biz/requests";
+import { request } from "@/biz/requests";
 
 /**
  * 用户登录
@@ -6,7 +6,7 @@ import { media_request } from "@/biz/requests";
  * @returns
  */
 export function login(body: { email: string; password: string }) {
-  return media_request.post<{
+  return request.post<{
     id: string;
     username: string;
     // name: string;
@@ -24,7 +24,7 @@ export function login(body: { email: string; password: string }) {
  * @returns
  */
 export function register(body: { email: string; password: string }) {
-  return media_request.post<{
+  return request.post<{
     id: string;
     username: string;
     // name: string;
@@ -37,11 +37,11 @@ export function register(body: { email: string; password: string }) {
 }
 
 export function logout(body: { email: string; password: string }) {
-  return media_request.post("/api/admin/user/logout", body);
+  return request.post("/api/admin/user/logout", body);
 }
 
 export function get_token() {
-  return media_request.post("/api/token", {});
+  return request.post("/api/token", {});
 }
 
 /**
@@ -49,12 +49,12 @@ export function get_token() {
  * @returns
  */
 export function fetch_user_profile() {
-  return media_request.get("/api/admin/user/profile");
+  return request.get("/api/admin/user/profile");
 }
 
 /**
  * 成员通过授权链接访问首页时，验证该链接是否有效
  */
 export function validate(token: string) {
-  return media_request.post<{ token: string }>("/api/admin/user/validate", { token });
+  return request.post<{ token: string }>("/api/admin/user/validate", { token });
 }

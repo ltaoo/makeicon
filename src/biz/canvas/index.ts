@@ -1,8 +1,8 @@
-import { PathPoint, PathPointMirrorTypes } from "@/biz/path_point";
-import { BezierPath } from "@/biz/bezier_path";
 import { base, Handler } from "@/domains/base";
-import { BezierPoint } from "@/biz/bezier_point";
+import { PathPoint, PathPointMirrorTypes } from "@/biz/path_point";
 import { getSymmetricPoint2, toBase64 } from "@/biz/path_point/utils";
+import { BezierPath } from "@/biz/bezier_path";
+import { BezierPoint } from "@/biz/bezier_point";
 
 const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
 
@@ -32,20 +32,27 @@ export function Canvas(props: CanvasProps) {
     width: 0,
     height: 0,
   };
+  /** 网格区域信息 */
   let _grid = {
     x: 0,
     y: 0,
     width: 0,
     height: 0,
   };
-  let _dragging = false;
+  let _prepare_dragging = false;
   let _moving_for_new_line = false;
-  let _has_moving_after_down = false;
+  /** 当前是否处于拖动 坐标点或锚点 */
+  let _dragging = false;
+  let _out_grid = true;
+  /** 之前拖动过的路径点，包含了 坐标点和锚点 */
   let _prev_path_point: PathPoint | null = null;
+  /** 当前拖动的路径点，包含了 坐标点和锚点 */
   let _cur_path_point: PathPoint | null = null;
+  /** 之前拖动过的点，可能是 锚点、坐标点 */
   let _prev_point: BezierPoint | null = null;
+  /** 当前拖动的点，可能是 锚点、坐标点 */
   let _cur_point: BezierPoint | null = null;
-  // 编辑、工具等相关状态
+  /** 当前是否激活钢笔工具 */
   let _pen_editing = 1;
   let _events: (() => void)[] = [];
   // 事件
@@ -107,6 +114,19 @@ export function Canvas(props: CanvasProps) {
       const y = parseFloat(((pos.y - _grid.y) * scale).toFixed(precision));
       return [x, y];
     },
+    deleteCurPoint() {
+      if (!_cur_point) {
+        return;
+      }
+      for (let i = 0; i < paths.length; i += 1) {
+        const path = paths[i];
+        path.deletePoint(_cur_point);
+      }
+      bus.emit(Events.Update);
+      // _points = paths.reduce((prev, cur) => {
+      //   return prev.concat(cur.points);
+      // }, [] as BezierPoint[]);
+    },
     cancelPen() {
       const path = _paths[0];
       if (!path) {
@@ -134,7 +154,7 @@ export function Canvas(props: CanvasProps) {
       let d = "";
       for (let i = 0; i < _paths.length; i += 1) {
         const path = _paths[i];
-        const { outline } = path.buildOutline("round");
+        const { outline } = path.buildOutline({ cap: "round", scene: 1 });
         const first = outline[0];
         if (!first) {
           svg += "</svg>";
@@ -144,7 +164,6 @@ export function Canvas(props: CanvasProps) {
         for (let i = 0; i < outline.length; i += 1) {
           const curve = outline[i];
           const [start, c1, c2, end] = curve.points;
-          console.log(i);
           // console.log(start, c1, c2, end);
           if (i === 0 && start) {
             d += `M${this.transformPos(start, { scale }).join(" ")}`;
@@ -177,6 +196,9 @@ export function Canvas(props: CanvasProps) {
       const template = `.icon-example {\n-webkit-mask:url('${url}') no-repeat 50% 50%;\n-webkit-mask-size:cover;\n}`;
       return template;
     },
+    update() {
+      bus.emit(Events.Update);
+    },
     handleMouseDown(pos: { x: number; y: number }) {
       const { x, y } = pos;
       const path = _paths[0];
@@ -188,45 +210,9 @@ export function Canvas(props: CanvasProps) {
           return;
         }
         if (_moving_for_new_line && _cur_path_point) {
-          // 创建点后移动，选择了一个位置，点击
-          _dragging = true;
-          const to_of_cur_path_point = BezierPoint({
-            x,
-            y,
-          });
-          _cur_path_point.setVirtual(false);
-          _cur_path_point.setTo(to_of_cur_path_point);
+          // 创建点后移动，选择了一个位置，按下，看准备拖动创建曲线，还是松开直接创建直线
+          _prepare_dragging = true;
           _cur_point = _cur_path_point.to;
-          if (_prev_path_point && _prev_path_point.start) {
-            const start = _prev_path_point;
-            const p = getSymmetricPoint2(
-              start.point,
-              { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
-              { x, y },
-              AUTO_CONTROLLER_POINT_LENGTH_RATIO
-            );
-            const to_of_prev_path_point = BezierPoint({
-              x: p.x,
-              y: p.y,
-            });
-            const unlisten = to_of_cur_path_point.onMove(() => {
-              if (!_cur_path_point) {
-                return;
-              }
-              if (!_cur_path_point.to) {
-                return;
-              }
-              const p = getSymmetricPoint2(
-                start.point,
-                { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
-                { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
-                AUTO_CONTROLLER_POINT_LENGTH_RATIO
-              );
-              to_of_prev_path_point.handleMove({ x: p.x, y: p.y });
-            });
-            _events.push(unlisten);
-            start.setTo(to_of_prev_path_point);
-          }
           return;
         }
         // 画布空白，第一次点击，创建起点
@@ -263,20 +249,114 @@ export function Canvas(props: CanvasProps) {
       _my = y;
       const found = checkIsClickPoint(pos);
       if (found) {
-        _dragging = true;
+        _prepare_dragging = true;
         _cur_point = found;
         _cx = found.x;
         _cy = found.y;
       }
     },
     handleMouseMove(pos: { x: number; y: number }) {
-      //       const found = checkIsClickPoint(position);
-      // console.log("[BIZ]canvas/index - handleMouseMove", _dragging, _mp);
-      // const grid = [_grid.x, _grid.y, _grid.x + _grid.width, _grid.y + _grid.height];
-      if (_pen_editing && !_dragging && !inGrid(pos)) {
-        return;
-      }
-      if (_pen_editing && _moving_for_new_line) {
+      const { x, y } = pos;
+      // if (_pen_editing && !_prepare_dragging && !inGrid(pos)) {
+      //   return;
+      // }
+      if (_pen_editing) {
+        const _inGrid = inGrid(pos);
+        if (!_inGrid) {
+          if (_out_grid === false) {
+            // 出去的那刻
+            if (!_dragging && _moving_for_new_line && _cur_path_point) {
+              _cur_path_point.setHidden(true);
+              bus.emit(Events.Update);
+            }
+          }
+          _out_grid = true;
+          if (!_dragging) {
+            return;
+          }
+        }
+        if (_inGrid) {
+          if (_out_grid === true) {
+            // 进入的那刻
+            if (_cur_path_point && _cur_path_point.hidden) {
+              _cur_path_point.setHidden(false);
+            }
+          }
+          _out_grid = false;
+        }
+        if (_prepare_dragging && _cur_path_point) {
+          // console.log("start dragging");
+          _dragging = true;
+          _prepare_dragging = false;
+          const to_of_cur_path_point = BezierPoint({
+            x,
+            y,
+          });
+          _cur_point = to_of_cur_path_point;
+          _cur_path_point.setVirtual(false);
+          _cur_path_point.setTo(to_of_cur_path_point);
+          if (_prev_path_point && _prev_path_point.start) {
+            const start = _prev_path_point;
+            const p = getSymmetricPoint2(
+              start.point,
+              { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
+              { x, y },
+              AUTO_CONTROLLER_POINT_LENGTH_RATIO
+            );
+            const to_of_prev_path_point = BezierPoint({
+              x: p.x,
+              y: p.y,
+            });
+            const unlisten = to_of_cur_path_point.onMove(() => {
+              if (!_cur_path_point) {
+                return;
+              }
+              if (!_cur_path_point.to) {
+                return;
+              }
+              const p = getSymmetricPoint2(
+                start.point,
+                { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
+                { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
+                AUTO_CONTROLLER_POINT_LENGTH_RATIO
+              );
+              to_of_prev_path_point.handleMove({ x: p.x, y: p.y });
+            });
+            _events.push(unlisten);
+            start.setTo(to_of_prev_path_point);
+          }
+          if (_prev_path_point && _prev_path_point.to === null && _prev_path_point.from === null) {
+            // 直线后，接曲线
+            const prev_path_point = _prev_path_point;
+            const p = getSymmetricPoint2(
+              prev_path_point.point,
+              { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
+              { x, y },
+              AUTO_CONTROLLER_POINT_LENGTH_RATIO
+            );
+            const to_of_prev_path_point = BezierPoint({
+              x: p.x,
+              y: p.y,
+            });
+            const unlisten = to_of_cur_path_point.onMove(() => {
+              if (!_cur_path_point) {
+                return;
+              }
+              if (!_cur_path_point.to) {
+                return;
+              }
+              const p = getSymmetricPoint2(
+                prev_path_point.point,
+                { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
+                { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
+                AUTO_CONTROLLER_POINT_LENGTH_RATIO
+              );
+              to_of_prev_path_point.handleMove({ x: p.x, y: p.y });
+            });
+            _events.push(unlisten);
+            prev_path_point.setTo(to_of_prev_path_point);
+          }
+        }
         if (_cur_point) {
           _ox = pos.x - _mx;
           _oy = pos.y - _my;
@@ -288,7 +368,7 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      if (!_dragging) {
+      if (!_prepare_dragging) {
         return;
       }
       if (!_cur_point) {
@@ -314,15 +394,18 @@ export function Canvas(props: CanvasProps) {
         }
         _events = [];
         const cur = path.getCurPoint();
-        if (_moving_for_new_line && _dragging) {
-          if (!cur) {
-            return;
-          }
+        if (!cur) {
+          return;
+        }
+        // console.log("_prepare_dragging / ", _prepare_dragging, _dragging, _cur_path_point);
+        if (_dragging) {
+          // 确定一个点后生成线条，拖动控制点改变线条曲率，然后松开
           if (!cur.from) {
             return;
           }
-          // 确定一个点后生成线条，拖动控制点改变线条曲率，然后松开
+          _prepare_dragging = false;
           _dragging = false;
+          _moving_for_new_line = true;
           const p = getSymmetricPoint2(cur.point, { x, y }, cur.from, AUTO_CONTROLLER_POINT_LENGTH_RATIO);
           const from_of_new_path_point = BezierPoint({
             x: p.x,
@@ -363,12 +446,42 @@ export function Canvas(props: CanvasProps) {
           });
           return;
         }
-      }
-      if (!_dragging) {
+        if (_prepare_dragging && !_dragging) {
+          // 确定一个点后生成线条，没有拖动控制点改变线条曲率，直接松开。这里直线曲线都可能
+          // @todo 如果本来是创建曲线，结果实际上创建了直线，应该移除曲线的控制点，变成真正的直线
+          // console.log("初始化下一个坐标点");
+          _moving_for_new_line = true;
+          _prepare_dragging = false;
+          _dragging = false;
+          if (_cur_path_point) {
+            _cur_path_point.setVirtual(false);
+            _cur_path_point.setMirror(PathPointMirrorTypes.NoMirror);
+          }
+          const new_path_point = PathPoint({
+            point: BezierPoint({
+              x: pos.x,
+              y: pos.y,
+            }),
+            from: null,
+            to: null,
+            end: true,
+            mirror: PathPointMirrorTypes.MirrorAngleAndLength,
+          });
+          _prev_path_point = cur;
+          _prev_point = cur.point;
+          _cur_path_point = new_path_point;
+          _cur_point = new_path_point.point;
+          path.appendPoint(new_path_point);
+          return;
+        }
         return;
       }
+      if (!_prepare_dragging) {
+        return;
+      }
+      _prepare_dragging = false;
       _dragging = false;
-      _cur_point = null;
+      // _cur_point = null;
       _cur_path_point = null;
     },
     handleMouseOut() {},

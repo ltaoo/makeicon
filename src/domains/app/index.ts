@@ -58,6 +58,7 @@ enum Events {
   Resize,
   Blur,
   Keydown,
+  Keyup,
   OrientationChange,
   EscapeKeyDown,
   StateChange,
@@ -75,7 +76,10 @@ type TheTypesOfEvents = {
   };
   [Events.DeviceSizeChange]: DeviceSizeTypes;
   [Events.Keydown]: {
-    key: string;
+    code: string;
+  };
+  [Events.Keyup]: {
+    code: string;
   };
   [Events.EscapeKeyDown]: void;
   [Events.Blur]: void;
@@ -264,11 +268,14 @@ export class Application<T extends { storage: StorageCore<any> }> extends BaseDo
     throw new Error("请实现 enablePointer 方法");
   }
   /** 平台相关的全局事件 */
-  keydown({ key }: { key: string }) {
-    if (key === "Escape") {
+  keydown(code: string) {
+    this.emit(Events.Keydown, { code });
+  }
+  keyup(code: string) {
+    if (code === "Escape") {
       this.escape();
     }
-    this.emit(Events.Keydown, { key });
+    this.emit(Events.Keyup, { code });
   }
   escape() {
     this.emit(Events.EscapeKeyDown);
@@ -331,6 +338,9 @@ export class Application<T extends { storage: StorageCore<any> }> extends BaseDo
   }
   onKeydown(handler: Handler<TheTypesOfEvents[Events.Keydown]>) {
     return this.on(Events.Keydown, handler);
+  }
+  onKeyup(handler: Handler<TheTypesOfEvents[Events.Keyup]>) {
+    return this.on(Events.Keyup, handler);
   }
   onEscapeKeyDown(handler: Handler<TheTypesOfEvents[Events.EscapeKeyDown]>) {
     return this.on(Events.EscapeKeyDown, handler);

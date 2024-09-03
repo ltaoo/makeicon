@@ -25,7 +25,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
       $$canvas.clear();
       $$canvas.drawGrid();
       if ($$path.skeleton.length > 1) {
-        const curves = $$path.buildOutline("round");
+        const curves = $$path.buildOutline({ cap: "round" });
         // 绘制描边
         ctx.save();
         ctx.beginPath();
@@ -40,7 +40,8 @@ export const HomeIndexPage: ViewComponent = (props) => {
           // console.log(curves.outline[i]);
           (() => {
             if (curve._linear) {
-              ctx.lineTo(c2.x, c2.y);
+              const last = curve.points[curve.points.length - 1];
+              ctx.lineTo(last.x, last.y);
               return;
             }
             if (end) {
@@ -101,23 +102,28 @@ export const HomeIndexPage: ViewComponent = (props) => {
       for (let i = 0; i < $$path.skeleton.length; i += 1) {
         const point = $$path.skeleton[i];
         ctx.strokeStyle = "lightgrey";
-        ctx.beginPath();
-        // console.log(i, point.start ? "start" : "", point.from, point.to);
-        if (point.from) {
-          $$canvas.drawLine(point, point.from);
-        }
-        if (point.to) {
-          $$canvas.drawLine(point, point.to);
-        }
-        ctx.strokeStyle = "black";
-        const radius = 3;
-        $$canvas.drawCircle(point.point, radius);
-        if (point.from) {
-          $$canvas.drawDiamondAtLineEnd(point, point.from);
-        }
-        if (point.to) {
-          $$canvas.drawDiamondAtLineEnd(point, point.to);
-        }
+        (() => {
+          if (point.hidden) {
+            return;
+          }
+          ctx.beginPath();
+          // console.log(i, point.start ? "start" : "", point.from, point.to);
+          if (point.from) {
+            $$canvas.drawLine(point, point.from);
+          }
+          if (point.to && !point.virtual) {
+            $$canvas.drawLine(point, point.to);
+          }
+          ctx.strokeStyle = "black";
+          const radius = 3;
+          $$canvas.drawCircle(point.point, radius);
+          if (point.from) {
+            $$canvas.drawDiamondAtLineEnd(point, point.from);
+          }
+          if (point.to && !point.virtual) {
+            $$canvas.drawDiamondAtLineEnd(point, point.to);
+          }
+        })();
       }
       ctx.restore();
 
@@ -138,6 +144,11 @@ export const HomeIndexPage: ViewComponent = (props) => {
     connect($$canvas, $canvas, ctx);
     $$canvas.onUpdate(() => {
       draw(ctx);
+    });
+    app.onKeyup(({ code }) => {
+      if (code === "Backspace") {
+        $$canvas.deleteCurPoint();
+      }
     });
     draw(ctx);
   });
@@ -188,6 +199,14 @@ export const HomeIndexPage: ViewComponent = (props) => {
               }}
             >
               小程序代码
+            </div>
+            <div
+              class="inline-block px-4 border font-sm bg-white cursor-pointer"
+              onClick={() => {
+                $$canvas.update();
+              }}
+            >
+              刷新
             </div>
           </div>
         </div>

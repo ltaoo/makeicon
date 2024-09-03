@@ -1,10 +1,10 @@
 import { request_factory } from "@/domains/request/utils";
 import { Result } from "@/domains/result";
 
-export const media_request = request_factory({
+export const request = request_factory({
   hostnames: {
-    dev: "https://media-t.funzm.com",
-    test: "https://media-t.funzm.com",
+    dev: "",
+    test: "",
     prod: "",
   },
   process<T>(r: Result<{ code: number | string; msg: string; data: T }>) {

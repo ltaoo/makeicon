@@ -4,10 +4,7 @@ import { createSignal, For, onMount, Show } from "solid-js";
 import { render } from "solid-js/web";
 import { Loader2 } from "lucide-solid";
 
-import { app, history } from "./store/index";
-import { storage } from "./store/storage";
-import { client } from "./store/request";
-import { PageKeys } from "./store/routes";
+import { app, history, storage, client, PageKeys } from "./store/index";
 import { pages } from "./store/views";
 import { KeepAliveRouteView } from "./components/ui";
 import { Toast } from "./components/ui/toast";

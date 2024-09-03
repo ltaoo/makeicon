@@ -36,7 +36,10 @@ export function PathPoint(props: PathPointProps) {
   let _from = from;
   let _to = to;
   let _mirror = mirror || PathPointMirrorTypes.NoMirror;
+  /** 表示还在移动，没有确定的坐标 */
   let _virtual = virtual;
+  /** 表示隐藏，不绘制 */
+  let _hidden = false;
   if (_mirror === PathPointMirrorTypes.MirrorAngleAndLength && _from && !_to) {
     const symPoint = getSymmetricPoints({ x: point.x, y: point.y }, _from);
     _to = BezierPoint(symPoint);
@@ -150,8 +153,27 @@ export function PathPoint(props: PathPointProps) {
     setVirtual(v: boolean) {
       _virtual = v;
     },
+    get hidden() {
+      return _hidden;
+    },
+    setHidden(v: boolean) {
+      _hidden = v;
+    },
+    setMirror(type: PathPointMirrorTypes) {
+      _mirror = type;
+    },
     get state() {
       return _state;
+    },
+    deletePoint(point: BezierPoint) {
+      if (_from === point) {
+        _from = null;
+        _mirror = PathPointMirrorTypes.NoMirror;
+      }
+      if (_to === point) {
+        _to = null;
+        _mirror = PathPointMirrorTypes.NoMirror;
+      }
     },
     onToOrFromChange(handler: Handler<TheTypesOfEvents[Events.ToOrFromChange]>) {
       return bus.on(Events.ToOrFromChange, handler);

@@ -1,13 +1,12 @@
 // @ts-nocheck
 
-import { Bezier } from "./bezier";
-import { BezierBox, BezierPoint } from "./type";
+import { Bezier } from "./bezier.js";
 
 // math-inlining.
 const { abs, cos, sin, acos, atan2, sqrt, pow } = Math;
 
 // cube root function yielding real roots
-function crt(v: number) {
+function crt(v) {
   return v < 0 ? -pow(-v, 1 / 3) : pow(v, 1 / 3);
 }
 
@@ -57,7 +56,7 @@ const utils = {
     0.0123412297999871995468056670700372915759, 0.0123412297999871995468056670700372915759,
   ],
 
-  arcfn: function (t: number, derivativeFn: Function) {
+  arcfn: function (t, derivativeFn) {
     const d = derivativeFn(t);
     let l = d.x * d.x + d.y * d.y;
     if (typeof d.z !== "undefined") {
@@ -66,7 +65,7 @@ const utils = {
     return sqrt(l);
   },
 
-  compute: function (t: number, points: { x: number; y: number; z: number; t: number }[], _3d: boolean) {
+  compute: function (t, points, _3d) {
     // shortcuts
     if (t === 0) {
       points[0].t = 0;
@@ -91,7 +90,7 @@ const utils = {
 
     // linear?
     if (order === 1) {
-      const ret: { x: number; y: number; t: number; z?: number } = {
+      const ret = {
         x: mt * p[0].x + t * p[1].x,
         y: mt * p[0].y + t * p[1].y,
         t: t,
@@ -106,9 +105,9 @@ const utils = {
     if (order < 4) {
       let mt2 = mt * mt,
         t2 = t * t,
-        a = 0,
-        b = 0,
-        c = 0,
+        a,
+        b,
+        c,
         d = 0;
       if (order === 2) {
         p = [p[0], p[1], p[2], ZERO];
@@ -121,7 +120,7 @@ const utils = {
         c = mt * t2 * 3;
         d = t * t2;
       }
-      const ret: { x: number; y: number; t: number; z?: number } = {
+      const ret = {
         x: a * p[0].x + b * p[1].x + c * p[2].x + d * p[3].x,
         y: a * p[0].y + b * p[1].y + c * p[2].y + d * p[3].y,
         t: t,
@@ -150,7 +149,7 @@ const utils = {
     return dCpts[0];
   },
 
-  computeWithRatios: function (t: number, points: BezierPoint[], ratios, _3d: boolean) {
+  computeWithRatios: function (t, points, ratios, _3d) {
     const mt = 1 - t,
       r = ratios,
       p = points;
@@ -207,7 +206,7 @@ const utils = {
     }
   },
 
-  derive: function (points: { x: number; y: number; z: number; t: number }[], _3d: boolean) {
+  derive: function (points, _3d) {
     const dpoints = [];
     for (let p = points, d = p.length, c = d - 1; d > 1; d--, c--) {
       const list = [];
@@ -215,7 +214,6 @@ const utils = {
         dpt = {
           x: c * (p[j + 1].x - p[j].x),
           y: c * (p[j + 1].y - p[j].y),
-          z: 0,
         };
         if (_3d) {
           dpt.z = c * (p[j + 1].z - p[j].z);
@@ -228,15 +226,15 @@ const utils = {
     return dpoints;
   },
 
-  between: function (v: number, m: number, M: number) {
+  between: function (v, m, M) {
     return (m <= v && v <= M) || utils.approximately(v, m) || utils.approximately(v, M);
   },
 
-  approximately: function (a: number, b: number, precision?: number) {
+  approximately: function (a, b, precision) {
     return abs(a - b) <= (precision || epsilon);
   },
 
-  length: function (derivativeFn: Function) {
+  length: function (derivativeFn) {
     const z = 0.5,
       len = utils.Tvalues.length;
 
@@ -249,7 +247,7 @@ const utils = {
     return z * sum;
   },
 
-  map: function (v: number, ds: number, de: number, ts: number, te: number) {
+  map: function (v, ds, de, ts, te) {
     const d1 = de - ds,
       d2 = te - ts,
       v2 = v - ds,
@@ -257,8 +255,8 @@ const utils = {
     return ts + d2 * r;
   },
 
-  lerp: function (r: number, v1: { x: number; y: number; z: number }, v2: { x: number; y: number; z: number }) {
-    const ret: { x: number; y: number; z?: number } = {
+  lerp: function (r, v1, v2) {
+    const ret = {
       x: v1.x + r * (v2.x - v1.x),
       y: v1.y + r * (v2.y - v1.y),
     };
@@ -276,15 +274,15 @@ const utils = {
     return s;
   },
 
-  pointsToString: function (points: {}[]) {
+  pointsToString: function (points) {
     return "[" + points.map(utils.pointToString).join(", ") + "]";
   },
 
-  copy: function (obj: Record<string, unknown>) {
+  copy: function (obj) {
     return JSON.parse(JSON.stringify(obj));
   },
 
-  angle: function (o: { x: number; y: number }, v1: { x: number; y: number }, v2: { x: number; y: number }) {
+  angle: function (o, v1, v2) {
     const dx1 = v1.x - o.x,
       dy1 = v1.y - o.y,
       dx2 = v2.x - o.x,
@@ -295,21 +293,19 @@ const utils = {
   },
 
   // round as string, to avoid rounding errors
-  round: function (v: number, d: number) {
-    const s = "" + v;
-    const pos = s.indexOf(".");
-    return parseFloat(s.substring(0, pos + 1 + d));
+  round: function (v, d) {
+    return parseFloat(Number(v).toFixed(d));
   },
 
-  dist: function (p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  dist: function (p1, p2) {
     const dx = p1.x - p2.x,
       dy = p1.y - p2.y;
     return sqrt(dx * dx + dy * dy);
   },
 
-  closest: function (LUT: { x: number; y: number }[], point: { x: number; y: number }) {
+  closest: function (LUT, point) {
     let mdist = pow(2, 63),
-      mpos = 0,
+      mpos,
       d;
     LUT.forEach(function (p, idx) {
       d = utils.dist(point, p);
@@ -321,10 +317,10 @@ const utils = {
     return { mdist: mdist, mpos: mpos };
   },
 
-  abcratio: function (t: number, n: number) {
+  abcratio: function (t, n) {
     // see ratio(t) note on http://pomax.github.io/bezierinfo/#abc
     if (n !== 2 && n !== 3) {
-      return 0;
+      return false;
     }
     if (typeof t === "undefined") {
       t = 0.5;
@@ -336,10 +332,10 @@ const utils = {
     return abs(top / bottom);
   },
 
-  projectionratio: function (t: number, n: number) {
+  projectionratio: function (t, n) {
     // see u(t) note on http://pomax.github.io/bezierinfo/#abc
     if (n !== 2 && n !== 3) {
-      return 0;
+      return false;
     }
     if (typeof t === "undefined") {
       t = 0.5;
@@ -351,22 +347,17 @@ const utils = {
     return top / bottom;
   },
 
-  lli8: function (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, x4: number, y4: number) {
+  lli8: function (x1, y1, x2, y2, x3, y3, x4, y4) {
     const nx = (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4),
       ny = (x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4),
       d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     if (d == 0) {
-      return { x: 0, y: 0 };
+      return false;
     }
     return { x: nx / d, y: ny / d };
   },
 
-  lli4: function (
-    p1: { x: number; y: number },
-    p2: { x: number; y: number },
-    p3: { x: number; y: number },
-    p4: { x: number; y: number }
-  ) {
+  lli4: function (p1, p2, p3, p4) {
     const x1 = p1.x,
       y1 = p1.y,
       x2 = p2.x,
@@ -378,18 +369,15 @@ const utils = {
     return utils.lli8(x1, y1, x2, y2, x3, y3, x4, y4);
   },
 
-  lli: function (
-    v1: { x: number; y: number; c: { x: number; y: number } },
-    v2: { x: number; y: number; c: { x: number; y: number } }
-  ) {
+  lli: function (v1, v2) {
     return utils.lli4(v1, v1.c, v2, v2.c);
   },
 
-  makeline: function (p1: { x: number; y: number }, p2: { x: number; y: number }) {
-    return new Bezier([p1.x, p1.y, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2, p2.x, p2.y]);
+  makeline: function (p1, p2) {
+    return new Bezier(p1.x, p1.y, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2, p2.x, p2.y);
   },
 
-  findbbox: function (sections: Bezier[]) {
+  findbbox: function (sections) {
     let mx = nMax,
       my = nMax,
       MX = nMin,
@@ -447,10 +435,8 @@ const utils = {
     return shape;
   },
 
-  getminmax: function (curve: Bezier, d: "x" | "y" | "z", list): BezierBox {
-    if (!list) {
-      return { min: 0, max: 0, mid: 0, size: 0 };
-    }
+  getminmax: function (curve, d, list) {
+    if (!list) return { min: 0, max: 0 };
     let min = nMax,
       max = nMin,
       t,
@@ -474,7 +460,7 @@ const utils = {
     return { min: min, mid: (min + max) / 2, max: max, size: max - min };
   },
 
-  align: function (points: BezierPoint[], line) {
+  align: function (points, line) {
     const tx = line.p1.x,
       ty = line.p1.y,
       a = -atan2(line.p2.y - ty, line.p2.x - tx),
@@ -500,7 +486,7 @@ const utils = {
       const a = aligned[0].y,
         b = aligned[1].y,
         c = aligned[2].y,
-        d = a - 2 * b + c;
+        d = utils.round(a - 2 * b + c, 3);
       if (d !== 0) {
         const m1 = -sqrt(b * b - a * c),
           m2 = -a + b,
@@ -566,7 +552,7 @@ const utils = {
       x1 = t1 * cos(phi / 3) - a / 3;
       x2 = t1 * cos((phi + tau) / 3) - a / 3;
       x3 = t1 * cos((phi + 2 * tau) / 3) - a / 3;
-      return [x1, x2, x3].filter(reduce);
+      return [x1, x2, x3].map((v) => utils.round(v, 3)).filter(reduce);
     } else if (discriminant === 0) {
       u1 = q2 < 0 ? crt(-q2) : -crt(q2);
       x1 = 2 * u1 - a / 3;
@@ -753,7 +739,7 @@ const utils = {
     }
   },
 
-  pairiteration: function (c1: Bezier, c2: Bezier, curveIntersectionThreshold = 0.5) {
+  pairiteration: function (c1, c2, curveIntersectionThreshold) {
     const c1b = c1.bbox(),
       c2b = c2.bbox(),
       r = 100000,
@@ -778,9 +764,7 @@ const utils = {
 
     let results = [];
 
-    if (pairs.length === 0) {
-      return results;
-    }
+    if (pairs.length === 0) return results;
 
     pairs.forEach(function (pair) {
       results = results.concat(utils.pairiteration(pair.left, pair.right, threshold));
@@ -793,7 +777,7 @@ const utils = {
     return results;
   },
 
-  getccenter: function (p1: BezierPoint, p2: BezierPoint, p3: BezierPoint) {
+  getccenter: function (p1, p2, p3) {
     const dx1 = p2.x - p1.x,
       dy1 = p2.y - p1.y,
       dx2 = p3.x - p2.x,
@@ -848,15 +832,13 @@ const utils = {
       }
     }
     // assign and done.
-    return {
-      ...arc,
-      s: s,
-      e: e,
-      r: r,
-    };
+    arc.s = s;
+    arc.e = e;
+    arc.r = r;
+    return arc;
   },
 
-  numberSort: function (a: number, b: number) {
+  numberSort: function (a, b) {
     return a - b;
   },
 };

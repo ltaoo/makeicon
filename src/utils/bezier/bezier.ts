@@ -22,22 +22,20 @@ const ZERO = { x: 0, y: 0, z: 0 };
  * ...docs pending...
  */
 class Bezier {
-  // bbox: {}[] = [];
   points: BezierPoint[] = [];
-  dpoints: { t: number; x: number; y: number; z?: number }[][] = [];
-  dims: ("x" | "y" | "z")[] = ["x", "y"];
-  dimlen = 2;
+  // dpoints: { t: number; x: number; y: number; z?: number }[][] = [];
+  // dims: ("x" | "y" | "z")[] = ["x", "y"];
+  // dimlen = 2;
   /** 2 linear   3 curves */
-  order = 2 | 3;
-  ratios: number[] = [];
-
+  // order = 2 | 3;
+  // ratios: number[] = [];
   /** 是否是直线 */
-  _linear = false;
+  // _linear = false;
   /** 是否是 3D */
-  _3d?: boolean;
-  _t1: number;
-  _t2: number;
-  _lut: BezierPoint[] = [];
+  _3d?: undefined;
+  // _t1: number;
+  // _t2: number;
+  // _lut: BezierPoint[] = [];
 
   constructor(coords) {
     let args = coords && coords.forEach ? coords : Array.from(arguments).slice();
@@ -826,12 +824,18 @@ class Bezier {
     return shapes;
   }
 
-  intersects(curve, curveIntersectionThreshold) {
+  intersects(curve, curveIntersectionThreshold?: number) {
     if (!curve) return this.selfintersects(curveIntersectionThreshold);
     if (curve.p1 && curve.p2) {
       return this.lineIntersects(curve);
     }
     if (curve instanceof Bezier) {
+      if (curve._linear) {
+        return this.lineIntersects({
+          p1: curve.points[0],
+          p2: curve.points[curve.points.length - 1],
+        });
+      }
       curve = curve.reduce();
     }
     return this.curveintersects(this.reduce(), curve, curveIntersectionThreshold);
@@ -844,7 +848,7 @@ class Bezier {
       MY = max(line.p1.y, line.p2.y);
     return utils.roots(this.points, line).filter((t) => {
       var p = this.get(t);
-      return utils.between(p.x, mx, MX) && utils.between(p.y, my, MY);
+      return utils.between(p.x, mx - 1, MX + 1) && utils.between(p.y, my - 1, MY + 1);
     });
   }
 

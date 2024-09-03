@@ -145,7 +145,10 @@ export class NavigatorCore extends BaseDomain<TheTypesOfEvents> {
   async prepare(location: RouteLocation) {
     // console.log("[DOMAIN]router - start");
     const { pathname, href, search, origin } = location;
-    const cleanPathname = pathname.replace(NavigatorCore.prefix!, "");
+    let cleanPathname = pathname;
+    if (NavigatorCore.prefix && NavigatorCore.prefix.match(/^\/[a-z0-9A-Z]{1,}/)) {
+      cleanPathname = pathname.replace(NavigatorCore.prefix!, "");
+    }
     this.setPathname(cleanPathname);
     this.origin = origin;
     this.location = location;
@@ -176,7 +179,8 @@ export class NavigatorCore extends BaseDomain<TheTypesOfEvents> {
   }
   /** 调用该方法来「改变地址」 */
   pushState(url: string) {
-    const u = `${this.origin}${NavigatorCore.prefix}${url}`;
+    const pathname = (NavigatorCore.prefix + url).replace(/^\/\//, "/");
+    const u = `${this.origin}${pathname}`;
     const r = new URL(u);
     const { pathname: realTargetPathname, search } = r;
     const prevPathname = this.pathname;
@@ -323,7 +327,10 @@ export class NavigatorCore extends BaseDomain<TheTypesOfEvents> {
     this.setPrevPathname(this.pathname);
     this.setPathname(targetPathname);
     // const cloneStacks = this.histories.slice(0, this.histories.length - 1);
-    console.log( "[DOMAIN]navigator - before pop", this.histories.map((h) => h.pathname));
+    console.log(
+      "[DOMAIN]navigator - before pop",
+      this.histories.map((h) => h.pathname)
+    );
     const cloneStacks = this.histories.slice(0, this.histories.length - 1);
     this.histories = cloneStacks.filter(Boolean);
     // this.histories.pop();
