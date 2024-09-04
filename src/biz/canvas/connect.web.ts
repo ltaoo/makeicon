@@ -1,3 +1,4 @@
+import { BezierPoint } from "@/biz/bezier_point";
 import { Canvas } from "./index";
 
 export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
@@ -34,6 +35,13 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     // const y = point.y;
     // // @ts-ignore
     // ctx.fillText(`${point._uid}、${x},${y}`, x + 2, y - 2);
+  };
+  store.drawLabel = (point: BezierPoint) => {
+    ctx.fillStyle = "black";
+    ctx.font = "10px Arial";
+    const x = point.x;
+    const y = point.y;
+    ctx.fillText(`${point.uid}|${x - store.grid.x},${y - store.grid.y}`, x + 2, y - 2);
   };
   store.drawDiamondAtLineEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
     // 绘制线条

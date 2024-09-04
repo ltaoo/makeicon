@@ -24,7 +24,7 @@ type PathPointProps = {
   end?: boolean;
   /** 未确定，预览 */
   virtual?: boolean;
-  mirror: null | PathPointMirrorTypes;
+  mirror?: null | PathPointMirrorTypes;
 };
 
 export function PathPoint(props: PathPointProps) {
@@ -50,6 +50,7 @@ export function PathPoint(props: PathPointProps) {
   }
   let _start = start;
   let _end = end;
+  let _closed = false;
 
   const _state = {
     from: _from,
@@ -59,7 +60,7 @@ export function PathPoint(props: PathPointProps) {
 
   point.onMove((v) => {
     if (_from) {
-      _from.handleMove(
+      _from.move(
         {
           x: _from.x + v.dx,
           y: _from.y + v.dy,
@@ -68,7 +69,7 @@ export function PathPoint(props: PathPointProps) {
       );
     }
     if (_to) {
-      _to.handleMove(
+      _to.move(
         {
           x: _to.x + v.dx,
           y: _to.y + v.dy,
@@ -83,11 +84,11 @@ export function PathPoint(props: PathPointProps) {
     if (f && t) {
       f.onMove((v) => {
         const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, f);
-        t.handleMove({ x: symPoint.x, y: symPoint.y }, { silence: true });
+        t.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
       });
       f.onMove((v) => {
         const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, t);
-        f.handleMove({ x: symPoint.x, y: symPoint.y }, { silence: true });
+        f.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
       });
     }
   }
@@ -125,11 +126,21 @@ export function PathPoint(props: PathPointProps) {
         const f = _from;
         f.onMove(() => {
           const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, f);
-          t.handleMove({ x: symPoint.x, y: symPoint.y }, { silence: true });
+          t.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
         });
         t.onMove(() => {
           const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, t);
-          f.handleMove({ x: symPoint.x, y: symPoint.y }, { silence: true });
+          f.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
+        });
+      }
+      bus.emit(Events.ToOrFromChange);
+    },
+    setFrom(point: BezierPoint, extra: Partial<{ copy: boolean }> = {}) {
+      _from = point;
+      if (extra.copy) {
+        _from = BezierPoint({
+          x: point.x,
+          y: point.y,
         });
       }
       bus.emit(Events.ToOrFromChange);
@@ -147,6 +158,12 @@ export function PathPoint(props: PathPointProps) {
     setEnd(is: boolean) {
       _end = is;
     },
+    get closed() {
+      return _closed;
+    },
+    setClosed() {
+      _closed = true;
+    },
     get virtual() {
       return _virtual;
     },
@@ -158,6 +175,9 @@ export function PathPoint(props: PathPointProps) {
     },
     setHidden(v: boolean) {
       _hidden = v;
+    },
+    get mirror() {
+      return _mirror;
     },
     setMirror(type: PathPointMirrorTypes) {
       _mirror = type;

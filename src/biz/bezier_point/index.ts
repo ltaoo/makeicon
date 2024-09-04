@@ -27,7 +27,7 @@ export function BezierPoint(props: BezierPointProps) {
   };
 
   return {
-    get _uid() {
+    get uid() {
       return _uid;
     },
     get x() {
@@ -36,10 +36,28 @@ export function BezierPoint(props: BezierPointProps) {
     get y() {
       return _y;
     },
+    get pos() {
+      return {
+        x: _x,
+        y: _y,
+      };
+    },
     get state() {
       return _state;
     },
-    handleMove(pos: { x: number; y: number }, options: Partial<{ silence: boolean }> = {}) {
+    // setXY(x: number, y: number, options: Partial<{ silence: boolean }> = {}) {
+    //   _x = x;
+    //   _y = y;
+    //   if (!options.silence) {
+    //     bus.emit(Events.Move, { x, y, dx, dy });
+    //   }
+    // },
+    setXY(pos: { x: number; y: number }) {
+      const { x, y } = pos;
+      _x = x;
+      _y = y;
+    },
+    move(pos: { x: number; y: number }, options: Partial<{ silence: boolean }> = {}) {
       const { x, y } = pos;
       const dx = x - _x;
       const dy = y - _y;

@@ -56,7 +56,7 @@ V (vertical lineto) :
 示例：V 100。
  */
 
-export class SvgParser {
+export class SVGParser {
   static components(type: string, path: string, cursor: number): [number, string[][]] {
     const expectedRegexList = kGrammar[type.toUpperCase()];
 
@@ -101,7 +101,7 @@ export class SvgParser {
       if (match !== null) {
         const command = match[1];
         cursor += match[0].length;
-        const componentList = SvgParser.components(command, path, cursor);
+        const componentList = SVGParser.components(command, path, cursor);
         cursor = componentList[0];
         tokens = [...tokens, ...componentList[1]];
       } else {
@@ -114,6 +114,6 @@ export class SvgParser {
 
 // 解析路径数据
 export function parsePathData(pathData: string) {
-  const points = SvgParser.parse(pathData);
+  const points = SVGParser.parse(pathData);
   return points;
 }

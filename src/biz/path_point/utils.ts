@@ -1,3 +1,7 @@
+import { Bezier } from "@/utils/bezier/bezier";
+
+import { PathPoint } from "./index";
+
 export function getSymmetricPoints(point2: { x: number; y: number }, point: { x: number; y: number }) {
   const symmetricPoint = {
     x: 2 * point2.x - point.x,
@@ -57,4 +61,191 @@ export function toBase64(template: string, options: Partial<{ doubleQuote: boole
     .replace(new RegExp(quotes, "g"), doubleQuote ? '"' : "'")
     .replace(new RegExp(equal, "g"), "=");
   return svg + data;
+}
+
+export function pushIfNoExisting<T>(arr: T[], v: T) {
+  if (arr.includes(v)) {
+    return arr;
+  }
+  return arr.push(v);
+}
+
+/**
+ * 已知两个点，获取连接成线后，垂直该线，并经过 a1，长度为 a1,a2 的 ratio 倍的线的终点坐标
+ * 会有两个，一上一下
+ */
+export function getVerticalPoints(a1: { x: number; y: number }, a2: { x: number; y: number }, ratio: number) {
+  const dx = a2.x - a1.x;
+  const dy = a2.y - a1.y;
+  const length_a1a2 = Math.sqrt(dx * dx + dy * dy);
+  const length_line1 = ratio * length_a1a2;
+  const unit_perpendicular = { x: -dy / length_a1a2, y: dx / length_a1a2 };
+  const line1_end_up = {
+    x: a1.x + unit_perpendicular.x * length_line1,
+    y: a1.y + unit_perpendicular.y * length_line1,
+  };
+  const line1_end_down = {
+    x: a1.x - unit_perpendicular.x * length_line1,
+    y: a1.y - unit_perpendicular.y * length_line1,
+  };
+  return [line1_end_up, line1_end_down];
+}
+/**
+ * 根据给定的三个在一条直线上的点，获取以该直线为直径的，构成圆的四条贝塞尔曲线
+ */
+
+export function getHalfCirclePoints(
+  f1: { x: number; y: number },
+  f5: { x: number; y: number },
+  f3: { x: number; y: number }
+) {
+  const c_ratio = 0.551915024494;
+  // 从右往左
+  const [rb, rt] = getVerticalPoints(f1, f5, c_ratio);
+  const [f2, f4] = getVerticalPoints(f5, f3, 1);
+  const [bl, br] = getVerticalPoints(f2, f5, c_ratio);
+  const [lt, lb] = getVerticalPoints(f3, f5, c_ratio);
+  const [tr, tl] = getVerticalPoints(f4, f5, c_ratio);
+  return [
+    new Bezier([f1, rb, br, f2]),
+    new Bezier([f2, bl, lb, f3]),
+    new Bezier([f3, lt, tl, f4]),
+    new Bezier([f4, tr, rt, f1]),
+    // {
+    //   points: [f1, rb, br, f2],
+    //   _linear: false,
+    // },
+    // {
+    //   points: [f2, bl, lb, f3],
+    //   _linear: false,
+    // },
+    // {
+    //   points: [f3, lt, tl, f4],
+    //   _linear: false,
+    // },
+    // {
+    //   points: [f4, tr, rt, f1],
+    //   _linear: false,
+    // },
+  ];
+}
+
+export function getOutlineOfRect(
+  cur: PathPoint,
+  next: PathPoint,
+  extra: Partial<{ radius: number }> = {}
+): { curves: Bezier[] } {
+  const { radius = 20 } = extra;
+  const direction = {
+    x: next.point.x - cur.point.x,
+    y: next.point.y - cur.point.y,
+  };
+  const length = Math.sqrt(direction.x ** 2 + direction.y ** 2);
+  const unitDirection = {
+    x: direction.x / length,
+    y: direction.y / length,
+  };
+  const perpendicularDirection = {
+    x: -unitDirection.y,
+    y: unitDirection.x,
+  };
+  const offset = {
+    x: radius * perpendicularDirection.x,
+    y: radius * perpendicularDirection.y,
+  };
+
+  // 计算四个坐标
+  const a1 = {
+    x: cur.point.x + offset.x,
+    y: cur.point.y + offset.y,
+  };
+  const a2 = {
+    x: next.point.x + offset.x,
+    y: next.point.y + offset.y,
+  };
+  const a3 = {
+    x: cur.point.x - offset.x,
+    y: cur.point.y - offset.y,
+  };
+  const a4 = {
+    x: next.point.x - offset.x,
+    y: next.point.y - offset.y,
+  };
+  const a13 = {
+    x: (a3.x - a1.x) / 2 + a1.x,
+    y: (a3.y - a1.y) / 2 + a1.y,
+  };
+  const a24 = {
+    x: (a4.x - a2.x) / 2 + a2.x,
+    y: (a4.y - a2.y) / 2 + a2.y,
+  };
+  return {
+    curves: [
+      // new Bezier([a3, a13, a1]),
+      // new Bezier([a1, a2, a2]),
+      // new Bezier([a2, a24, a4]),
+      // new Bezier([a4, a3, a3]),
+      // @ts-ignore
+      {
+        points: [a3, a13, a1],
+        _linear: true,
+      },
+      // @ts-ignore
+      {
+        points: [a1, a2, a2],
+        _linear: true,
+        _3d: false,
+      },
+      // @ts-ignore
+      {
+        points: [a2, a24, a4],
+        _linear: true,
+      },
+      // @ts-ignore
+      {
+        points: [a4, a3, a3],
+        _linear: true,
+        _3d: false,
+      },
+    ],
+  };
+}
+
+/**
+ * 计算两条线段的交点
+ */
+export function getLineIntersection(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  p3: { x: number; y: number },
+  p4: { x: number; y: number }
+) {
+  const a1 = p2.y - p1.y;
+  const b1 = p1.x - p2.x;
+  const c1 = a1 * p1.x + b1 * p1.y;
+  const a2 = p4.y - p3.y;
+  const b2 = p3.x - p4.x;
+  const c2 = a2 * p3.x + b2 * p3.y;
+  const delta = a1 * b2 - a2 * b1;
+  if (delta === 0) {
+    return null;
+  }
+  const intersectionX = (b2 * c1 - b1 * c2) / delta;
+  const intersectionY = (a1 * c2 - a2 * c1) / delta;
+  return { x: intersectionX, y: intersectionY };
+}
+export function calculateLineLength(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  const { x: x1, y: y1 } = p1;
+  const { x: x2, y: y2 } = p2;
+  const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  return length;
+}
+export function toFixPoint(pos: { x: number; y: number }) {
+  return {
+    x: parseFloat(pos.x.toFixed(2)),
+    y: parseFloat(pos.y.toFixed(2)),
+  };
+}
+export function toFixValue(v: number) {
+  return parseFloat(v.toFixed(2));
 }

@@ -30,9 +30,9 @@ class Bezier {
   // order = 2 | 3;
   // ratios: number[] = [];
   /** 是否是直线 */
-  // _linear = false;
+  _linear?: boolean;
   /** 是否是 3D */
-  _3d?: undefined;
+  _3d?: boolean;
   // _t1: number;
   // _t2: number;
   // _lut: BezierPoint[] = [];

@@ -19,15 +19,17 @@ export function Canvas(props: CanvasProps) {
   const { paths } = props;
 
   let _paths = paths;
-  let _points = paths.reduce((prev, cur) => {
-    return prev.concat(cur.points);
-  }, [] as BezierPoint[]);
+  let _points: BezierPoint[] = [];
+  let _path_points: PathPoint[] = [];
+  /** 按下时的位置 */
   let _mx = 0;
   let _my = 0;
   let _cx = 0;
   let _cy = 0;
   let _ox = 0;
   let _oy = 0;
+  let _mx2 = 0;
+  let _my2 = 0;
   let _size = {
     width: 0,
     height: 0,
@@ -52,14 +54,28 @@ export function Canvas(props: CanvasProps) {
   let _prev_point: BezierPoint | null = null;
   /** 当前拖动的点，可能是 锚点、坐标点 */
   let _cur_point: BezierPoint | null = null;
+  let _cur_path: BezierPath | null = null;
   /** 当前是否激活钢笔工具 */
   let _pen_editing = 1;
   let _events: (() => void)[] = [];
+  let _debug = false;
   // 事件
   const bus = base<TheTypesOfEvents>();
 
   function checkIsClickPoint(pos: { x: number; y: number }) {
     const matched = _points.find((p) => {
+      if (Math.abs(pos.x - p.x) < 10 && Math.abs(pos.y - p.y) < 10) {
+        return true;
+      }
+      return false;
+    });
+    if (matched) {
+      return matched;
+    }
+    return null;
+  }
+  function checkIsClickPathPoint(pos: { x: number; y: number }) {
+    const matched = _path_points.find((p) => {
       if (Math.abs(pos.x - p.x) < 10 && Math.abs(pos.y - p.y) < 10) {
         return true;
       }
@@ -76,11 +92,19 @@ export function Canvas(props: CanvasProps) {
     }
     return false;
   }
+  function updatePoints() {
+    const points: BezierPoint[] = [];
+    const path_points: PathPoint[] = [];
+    for (let i = 0; i < _paths.length; i += 1) {
+      const path = _paths[i];
+      points.push(...path.points);
+      path_points.push(...path.path_points);
+    }
+    _points = points;
+    _path_points = path_points;
+  }
 
   return {
-    get grid() {
-      return _grid;
-    },
     drawLine(p1: { x: number; y: number }, p2: { x: number; y: number }) {
       console.log("请实现 drawLine 方法");
     },
@@ -89,6 +113,9 @@ export function Canvas(props: CanvasProps) {
     },
     drawCircle(point: { x: number; y: number }, radius: number) {
       console.log("请实现 drawCircle 方法");
+    },
+    drawLabel(point: { x: number; y: number }) {
+      console.log("请实现 drawLabel 方法");
     },
     drawDiamondAtLineEnd(p1: { x: number; y: number }, p2: { x: number; y: number }) {
       console.log("请实现 drawDiamondAtLineEnd 方法");
@@ -105,13 +132,43 @@ export function Canvas(props: CanvasProps) {
     setSize(size: { width: number; height: number }) {
       Object.assign(_size, size);
     },
+    get grid() {
+      return _grid;
+    },
     setGrid(grid: { x: number; y: number; width: number; height: number }) {
       Object.assign(_grid, grid);
     },
+    normalizeX(v: number, extra: Partial<{ scale: number; precision: number; exp: boolean }> = {}) {
+      const { scale = 1, precision = 2, exp = true } = extra;
+      const x = parseFloat(
+        (
+          (() => {
+            if (exp) {
+              return v - _grid.x;
+            }
+            return v + _grid.x;
+          })() * scale
+        ).toFixed(precision)
+      );
+      return x;
+    },
+    normalizeY(v: number, extra: Partial<{ scale: number; precision: number; exp: boolean }> = {}) {
+      const { scale = 1, precision = 2, exp = true } = extra;
+      const y = parseFloat(
+        (
+          (() => {
+            if (exp) {
+              return v - _grid.y;
+            }
+            return v + _grid.y;
+          })() * scale
+        ).toFixed(precision)
+      );
+      return y;
+    },
     transformPos(pos: { x: number; y: number }, extra: Partial<{ scale: number; precision: number }> = {}) {
-      const { scale = 1, precision = 2 } = extra;
-      const x = parseFloat(((pos.x - _grid.x) * scale).toFixed(precision));
-      const y = parseFloat(((pos.y - _grid.y) * scale).toFixed(precision));
+      const x = this.normalizeX(pos.x, extra);
+      const y = this.normalizeY(pos.y, extra);
       return [x, y];
     },
     deleteCurPoint() {
@@ -123,12 +180,12 @@ export function Canvas(props: CanvasProps) {
         path.deletePoint(_cur_point);
       }
       bus.emit(Events.Update);
-      // _points = paths.reduce((prev, cur) => {
-      //   return prev.concat(cur.points);
-      // }, [] as BezierPoint[]);
+    },
+    getCurPath() {
+      return _cur_path;
     },
     cancelPen() {
-      const path = _paths[0];
+      const path = _cur_path;
       if (!path) {
         return;
       }
@@ -138,15 +195,13 @@ export function Canvas(props: CanvasProps) {
       _pen_editing = 0;
       _cur_path_point = null;
       _cur_point = null;
-      _points = paths.reduce((prev, cur) => {
-        return prev.concat(cur.points);
-      }, [] as BezierPoint[]);
+      updatePoints();
       bus.emit(Events.Update);
     },
     selectPen() {
       _pen_editing = 1;
     },
-    exportSVG() {
+    exportSVG(options: Partial<{ cap: "round" | "none" }> = {}) {
       const scale = 1;
       let svg = `<svg width="${_grid.width * scale}" height="${
         _grid.height * scale
@@ -154,7 +209,7 @@ export function Canvas(props: CanvasProps) {
       let d = "";
       for (let i = 0; i < _paths.length; i += 1) {
         const path = _paths[i];
-        const { outline } = path.buildOutline({ cap: "round", scene: 1 });
+        const { outline } = path.buildOutline({ cap: options.cap, scene: 1 });
         const first = outline[0];
         if (!first) {
           svg += "</svg>";
@@ -196,17 +251,54 @@ export function Canvas(props: CanvasProps) {
       const template = `.icon-example {\n-webkit-mask:url('${url}') no-repeat 50% 50%;\n-webkit-mask-size:cover;\n}`;
       return template;
     },
+    getMousePoint() {
+      return {
+        x: _mx2,
+        y: _my2,
+        // text: `${_mx2 - _grid.x},${_my2 - _grid.y}`,
+        text: `${_mx2},${_my2}`,
+      };
+    },
+    get paths() {
+      return _paths;
+    },
+    setPaths(paths: BezierPath[], extra: Partial<{ transform: boolean }> = {}) {
+      _paths = paths;
+      if (extra.transform) {
+        for (let i = 0; i < _paths.length; i += 1) {
+          const path = _paths[i];
+          path.points.forEach((point) => {
+            point.setXY({
+              x: this.normalizeX(point.x, { exp: false }),
+              y: this.normalizeY(point.y, { exp: false }),
+            });
+          });
+        }
+      }
+      updatePoints();
+      bus.emit(Events.Update);
+    },
     update() {
       bus.emit(Events.Update);
     },
     handleMouseDown(pos: { x: number; y: number }) {
       const { x, y } = pos;
-      const path = _paths[0];
-      if (!path) {
-        return;
-      }
       if (_pen_editing) {
         if (!inGrid(pos)) {
+          return;
+        }
+        const found = checkIsClickPathPoint(pos);
+        console.log("has matched point", pos);
+        if (found && _cur_path_point && found !== _cur_path_point && _cur_path) {
+          if (found.start) {
+            // 点击了开始点，闭合路径
+            found.setEnd(true);
+            _cur_path.setClosed();
+            _cur_path_point.setClosed();
+            _cur_path_point.point.move(found.point);
+            _prepare_dragging = true;
+            _moving_for_new_line = false;
+          }
           return;
         }
         if (_moving_for_new_line && _cur_path_point) {
@@ -237,12 +329,20 @@ export function Canvas(props: CanvasProps) {
           to: null,
           mirror: PathPointMirrorTypes.MirrorAngleAndLength,
         });
+        _cur_path = BezierPath({
+          points: [],
+          closed: false,
+        });
+        _paths.push(_cur_path);
+        _cur_path.onPointCountChange(() => {
+          updatePoints();
+        });
         _prev_path_point = start;
         _cur_path_point = end;
         _prev_point = start.point;
         _cur_point = end.point;
-        path.appendPoint(start);
-        path.appendPoint(end);
+        _cur_path.appendPoint(start);
+        _cur_path.appendPoint(end);
         return;
       }
       _mx = x;
@@ -257,6 +357,11 @@ export function Canvas(props: CanvasProps) {
     },
     handleMouseMove(pos: { x: number; y: number }) {
       const { x, y } = pos;
+      _mx2 = x;
+      _my2 = y;
+      if (_debug) {
+        bus.emit(Events.Update);
+      }
       // if (_pen_editing && !_prepare_dragging && !inGrid(pos)) {
       //   return;
       // }
@@ -294,8 +399,10 @@ export function Canvas(props: CanvasProps) {
           });
           _cur_point = to_of_cur_path_point;
           _cur_path_point.setVirtual(false);
+          _cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
           _cur_path_point.setTo(to_of_cur_path_point);
           if (_prev_path_point && _prev_path_point.start) {
+            // 特殊情况
             const start = _prev_path_point;
             const p = getSymmetricPoint2(
               start.point,
@@ -320,7 +427,7 @@ export function Canvas(props: CanvasProps) {
                 { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
                 AUTO_CONTROLLER_POINT_LENGTH_RATIO
               );
-              to_of_prev_path_point.handleMove({ x: p.x, y: p.y });
+              to_of_prev_path_point.move({ x: p.x, y: p.y });
             });
             _events.push(unlisten);
             start.setTo(to_of_prev_path_point);
@@ -351,7 +458,7 @@ export function Canvas(props: CanvasProps) {
                 { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
                 AUTO_CONTROLLER_POINT_LENGTH_RATIO
               );
-              to_of_prev_path_point.handleMove({ x: p.x, y: p.y });
+              to_of_prev_path_point.move({ x: p.x, y: p.y });
             });
             _events.push(unlisten);
             prev_path_point.setTo(to_of_prev_path_point);
@@ -360,7 +467,7 @@ export function Canvas(props: CanvasProps) {
         if (_cur_point) {
           _ox = pos.x - _mx;
           _oy = pos.y - _my;
-          _cur_point.handleMove({
+          _cur_point.move({
             x: _cx + _ox,
             y: _cy + _oy,
           });
@@ -368,15 +475,15 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      if (!_prepare_dragging) {
-        return;
-      }
+      // if (!_prepare_dragging) {
+      //   return;
+      // }
       if (!_cur_point) {
         return;
       }
       _ox = pos.x - _mx;
       _oy = pos.y - _my;
-      _cur_point.handleMove({
+      _cur_point.move({
         x: _cx + _ox,
         y: _cy + _oy,
       });
@@ -384,7 +491,7 @@ export function Canvas(props: CanvasProps) {
     },
     handleMouseUp(pos: { x: number; y: number }) {
       const { x, y } = pos;
-      const path = _paths[0];
+      const path = _cur_path;
       if (!path) {
         return;
       }
@@ -395,6 +502,28 @@ export function Canvas(props: CanvasProps) {
         _events = [];
         const cur = path.getCurPoint();
         if (!cur) {
+          return;
+        }
+        if (_cur_path_point && _cur_path_point.closed) {
+          console.log("before closed path mouse up");
+          // 闭合路径松开
+          const start = path.start_point;
+          start.setMirror(PathPointMirrorTypes.NoMirror);
+          start.setEnd(true);
+          console.log("set from for start point", _cur_path_point.from);
+          if (_cur_path_point.from) {
+            start.setFrom(_cur_path_point.from, { copy: true });
+          }
+          path.removeLastPoint();
+          _prepare_dragging = false;
+          _dragging = false;
+          _moving_for_new_line = false;
+          _cur_point = null;
+          _cur_path_point = null;
+          _pen_editing = 0;
+          // if (_dragging) {
+          // }
+          bus.emit(Events.Update);
           return;
         }
         // console.log("_prepare_dragging / ", _prepare_dragging, _dragging, _cur_path_point);
@@ -419,7 +548,7 @@ export function Canvas(props: CanvasProps) {
             from: from_of_new_path_point,
             to: null,
             end: true,
-            mirror: PathPointMirrorTypes.MirrorAngleAndLength,
+            mirror: PathPointMirrorTypes.NoMirror,
           });
           _prev_path_point = cur;
           _prev_point = cur.point;
@@ -439,7 +568,7 @@ export function Canvas(props: CanvasProps) {
               { x: cur.from.x, y: cur.from.y },
               AUTO_CONTROLLER_POINT_LENGTH_RATIO
             );
-            from_of_new_path_point.handleMove({
+            from_of_new_path_point.move({
               x: p.x,
               y: p.y,
             });
@@ -449,7 +578,7 @@ export function Canvas(props: CanvasProps) {
         if (_prepare_dragging && !_dragging) {
           // 确定一个点后生成线条，没有拖动控制点改变线条曲率，直接松开。这里直线曲线都可能
           // @todo 如果本来是创建曲线，结果实际上创建了直线，应该移除曲线的控制点，变成真正的直线
-          // console.log("初始化下一个坐标点");
+          console.log("初始化下一个坐标点", _cur_path_point?.mirror);
           _moving_for_new_line = true;
           _prepare_dragging = false;
           _dragging = false;
@@ -465,7 +594,6 @@ export function Canvas(props: CanvasProps) {
             from: null,
             to: null,
             end: true,
-            mirror: PathPointMirrorTypes.MirrorAngleAndLength,
           });
           _prev_path_point = cur;
           _prev_point = cur.point;
@@ -483,6 +611,12 @@ export function Canvas(props: CanvasProps) {
       _dragging = false;
       // _cur_point = null;
       _cur_path_point = null;
+    },
+    get debug() {
+      return _debug;
+    },
+    setDebug() {
+      _debug = !_debug;
     },
     handleMouseOut() {},
     onUpdate(handler: Handler<TheTypesOfEvents[Events.Update]>) {

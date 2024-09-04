@@ -15,6 +15,7 @@ export function connect<T extends { storage: StorageCore<any> }>(app: Applicatio
   app.copy = (text: string) => {
     const textArea = document.createElement("textarea");
     textArea.value = text;
+    textArea.style.cssText = "position: absolute; top: -999px; left: -999px;";
     document.body.appendChild(textArea);
     textArea.select();
     document.execCommand("copy");

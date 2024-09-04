@@ -2,27 +2,36 @@
 // import { Bezier } from "bezier-js";
 import { Bezier } from "@/utils/bezier/bezier";
 
-import { base } from "@/domains/base";
+import { base, Handler } from "@/domains/base";
 import { PathPoint } from "@/biz/path_point";
 import { BezierPoint } from "@/biz/bezier_point";
+import {
+  calculateLineLength,
+  getHalfCirclePoints,
+  getOutlineOfRect,
+  getLineIntersection,
+  toFixPoint,
+} from "@/biz/path_point/utils";
+import { SVGParser } from "@/biz/svg/parser";
+
+export type LineCapType = "round" | "none" | "rect";
 
 enum Events {
   Move,
+  PointCountChange,
+  Change,
 }
-type TheTypesOfEvents = {
-  [Events.Move]: { x: number; y: number };
-};
-
 type BezierPathProps = {
   points: PathPoint[];
-  closed: boolean;
+  closed?: boolean;
 };
 
 export function BezierPath(props: BezierPathProps) {
   const { points } = props;
 
-  const bus = base<TheTypesOfEvents>();
-
+  function refresh_bezier_points() {
+    _bezier_points = mapToBezierPoints(_path_points);
+  }
   function mapToBezierPoints(points: PathPoint[]) {
     return points.reduce((t, c) => {
       const points: BezierPoint[] = [c.point];
@@ -38,18 +47,48 @@ export function BezierPath(props: BezierPathProps) {
 
   let _path_points = points;
   let _bezier_points = mapToBezierPoints(_path_points);
-  const _state = {};
+  let _stroke = {
+    enabled: false,
+    width: 0,
+    start_cap: "round" as LineCapType,
+    end_cap: "round" as LineCapType,
+    color: "#111111",
+  };
+  let _fill = {
+    enabled: true,
+    color: "#111111",
+  };
+  let _closed = false;
+  const _state = {
+    stroke: _stroke,
+    fill: _fill,
+  };
+  type TheTypesOfEvents = {
+    [Events.Move]: { x: number; y: number };
+    [Events.PointCountChange]: void;
+    [Events.Change]: typeof _state;
+  };
+  const bus = base<TheTypesOfEvents>();
 
   return {
     get points() {
       return _bezier_points;
     },
+    get path_points() {
+      return _path_points;
+    },
     // 应该提供绘图的命令，而不是具体的实例
     get skeleton() {
       return _path_points;
     },
-    get start() {
+    get start_point() {
       return _path_points[0] ?? null;
+    },
+    get closed() {
+      return _closed;
+    },
+    setClosed() {
+      _closed = true;
     },
     get state() {
       return _state;
@@ -82,6 +121,7 @@ export function BezierPath(props: BezierPathProps) {
     deletePoint(point: BezierPoint) {
       const matched = this.findPathPointByPoint(point);
       if (!matched) {
+        // @todo 删除坐标点，等于将一条路径，拆分成多条
         return;
       }
       if (matched.point === point) {
@@ -90,7 +130,11 @@ export function BezierPath(props: BezierPathProps) {
       matched.deletePoint(point);
     },
     removeLastPoint() {
-      _path_points = _path_points.slice(0, -1);
+      const last = _path_points[_path_points.length - 1];
+      console.log("[BIZ]bezier_path/index - removeLastPoint", last);
+      _path_points = _path_points.filter((p) => p !== last);
+      refresh_bezier_points();
+      bus.emit(Events.PointCountChange);
     },
     appendPoint(point: PathPoint) {
       const prev = _path_points[_path_points.length - 1];
@@ -98,12 +142,16 @@ export function BezierPath(props: BezierPathProps) {
         prev.setEnd(false);
       }
       point.setEnd(true);
+      point.onToOrFromChange(() => {
+        refresh_bezier_points();
+        bus.emit(Events.PointCountChange);
+      });
       _path_points.push(point);
-      _bezier_points.push(...mapToBezierPoints(_path_points));
+      refresh_bezier_points();
+      // _bezier_points.push(...mapToBezierPoints(_path_points));
+      bus.emit(Events.PointCountChange);
     },
-    buildOutline(options: Partial<{ width: number; cap: "round" | "none" | "rect"; scene: number }> = {}): {
-      outline: { points: { x: number; y: number }[]; _linear: boolean }[];
-    } {
+    buildOutline(options: Partial<{ width: number; cap: LineCapType; scene: number }> = {}) {
       const { cap = "round", width = 20, scene } = options;
       //  const shapes1 = curve1.outline(20);
       // const forward_path: { x: number; y: number }[][] = [];
@@ -204,17 +252,20 @@ export function BezierPath(props: BezierPathProps) {
                 const l1 = calculateLineLength(prev_last_forward_points[0], prev_last_forward_points[1]);
                 const l2 = calculateLineLength(prev_last_forward_points[1], forward_intersection);
                 if (l2 <= l1 * 0.3) {
+                  // @ts-ignore
                   forward_path.push({
                     points: [prev_last_forward_points[0], forward_intersection, forward_intersection],
                     _linear: true,
                     _3d: false,
                   });
+                  // @ts-ignore
                   tmp_forward.unshift({
                     points: [forward_intersection, cur_first_forward_points[0], cur_first_forward_points[0]],
                     _linear: true,
                     _3d: false,
                   });
                 } else {
+                  // @ts-ignore
                   tmp_forward.unshift({
                     points: [prev_last_forward_points[0], cur_first_forward_points[0], cur_first_forward_points[0]],
                     _linear: true,
@@ -309,6 +360,9 @@ export function BezierPath(props: BezierPathProps) {
           outline.push(tl2);
           outline.push(tr2);
         }
+        if (cap === "none") {
+          outline.push(start_cap);
+        }
       }
       outline = [...outline, ...forward_path];
       if (end_cap) {
@@ -317,6 +371,9 @@ export function BezierPath(props: BezierPathProps) {
           const [tl1, tr1] = getHalfCirclePoints(end_cap.points[0], end_cap.points[1], end_cap.points[2]);
           outline.push(tl1);
           outline.push(tr1);
+        }
+        if (cap === "none") {
+          outline.push(end_cap);
         }
       }
       outline = [...outline, ...back_path];
@@ -343,12 +400,16 @@ export function BezierPath(props: BezierPathProps) {
         c: string;
         a: number[];
       }[] = [];
-      // console.log("[BIZ]bezier_path/index - getCommands", _path_points.length, _bezier_points.length);
+      // console.log("[BIZ]bezier_path/index - getCommands", _path_points, _bezier_points.length);
+      let is_closed: null | PathPoint = null;
       for (let i = 0; i < _path_points.length; i += 1) {
-        const cur = _path_points[i];
         const prev = _path_points[i - 1];
+        const cur = _path_points[i];
         const next = _path_points[i + 1];
         if (cur.start) {
+          if (cur.end) {
+            is_closed = cur;
+          }
           commands.push({
             c: "M",
             a: [cur.x, cur.y],
@@ -366,204 +427,119 @@ export function BezierPath(props: BezierPathProps) {
             });
             return;
           }
-          // if (cur.to && next && next.from) {
-          //   // 说明是一条曲线
-          //   commands.push({
-          //     c: "C",
-          //     a: [cur.to.x, cur.to.y, next.from.x, next.from.y, next.x, next.y],
-          //   });
-          //   return;
-          // }
           // 一条直线
           commands.push({
             c: "L",
             a: [cur.x, cur.y],
           });
         })();
+        if (!next && is_closed) {
+          if (cur.to && is_closed.from) {
+            commands.push({
+              c: "C",
+              a: [cur.to.x, cur.to.y, is_closed.from.x, is_closed.from.y, is_closed.point.x, is_closed.point.y],
+            });
+          }
+          if (!cur.to && !is_closed.from) {
+            commands.push({
+              c: "L",
+              a: [is_closed.point.x, is_closed.point.y],
+            });
+          }
+          commands.push({
+            c: "Z",
+            a: [],
+          });
+        }
       }
       // const buildOutline
       return commands;
     },
-    handleMove() {},
+    onPointCountChange(handler: Handler<TheTypesOfEvents[Events.PointCountChange]>) {
+      return bus.on(Events.PointCountChange, handler);
+    },
   };
 }
 
 export type BezierPath = ReturnType<typeof BezierPath>;
 
-function pushIfNoExisting<T>(arr: T[], v: T) {
-  if (arr.includes(v)) {
-    return arr;
+export function buildBezierPathsFromPathString(content: string) {
+  const tokens = SVGParser.parse(content);
+  const paths = [];
+  let cur_path: BezierPath | null = null;
+  let cur_path_point: PathPoint | null = null;
+  let start_path_point: PathPoint | null = null;
+  for (let i = 0; i < tokens.length; i += 1) {
+    const cur = tokens[i];
+    const next = tokens[i + 1];
+    const [command, ...args] = cur;
+    const values = args.map((v) => Number(v));
+    if (command === "M") {
+      const point = PathPoint({
+        point: BezierPoint({
+          // x: $$canvas.normalizeX(values[0], { exp: false }),
+          // y: $$canvas.normalizeY(values[1], { exp: false }),
+          x: values[0],
+          y: values[1],
+        }),
+        from: null,
+        to: null,
+        start: true,
+      });
+      cur_path_point = point;
+      start_path_point = point;
+      cur_path = BezierPath({
+        points: [point],
+      });
+      paths.push(cur_path);
+    }
+    if (command === "Z" && start_path_point) {
+      start_path_point.setEnd(true);
+      start_path_point.setClosed();
+    }
+    if (next && cur_path) {
+      const [next_command, ...next_args] = next;
+      const next_values = next_args.map((v) => Number(v));
+      if (next_command === "L") {
+        const next_path_point = PathPoint({
+          point: BezierPoint({
+            // x: $$canvas.normalizeX(next_values[0], { exp: false }),
+            // y: $$canvas.normalizeY(next_values[1], { exp: false }),
+            x: next_values[0],
+            y: next_values[1],
+          }),
+          from: null,
+          to: null,
+        });
+        cur_path_point = next_path_point;
+        cur_path.appendPoint(next_path_point);
+      }
+      if (next_command === "C") {
+        if (cur_path_point) {
+          cur_path_point.setTo(
+            BezierPoint({
+              // x: $$canvas.normalizeX(next_values[0], { exp: false }),
+              // y: $$canvas.normalizeY(next_values[1], { exp: false }),
+              x: next_values[0],
+              y: next_values[1],
+            })
+          );
+        }
+        const next_path_point = PathPoint({
+          point: BezierPoint({
+            x: next_values[4],
+            y: next_values[5],
+          }),
+          from: BezierPoint({
+            x: next_values[2],
+            y: next_values[3],
+          }),
+          to: null,
+        });
+        cur_path_point = next_path_point;
+        cur_path.appendPoint(next_path_point);
+      }
+    }
   }
-  return arr.push(v);
-}
-/**
- * 已知两个点，获取连接成线后，垂直该线，并经过 a1，长度为 a1,a2 的 ratio 倍的线的终点坐标
- * 会有两个，一上一下
- */
-function getVerticalPoints(a1: { x: number; y: number }, a2: { x: number; y: number }, ratio: number) {
-  const dx = a2.x - a1.x;
-  const dy = a2.y - a1.y;
-  const length_a1a2 = Math.sqrt(dx * dx + dy * dy);
-  const length_line1 = ratio * length_a1a2;
-  const unit_perpendicular = { x: -dy / length_a1a2, y: dx / length_a1a2 };
-  const line1_end_up = {
-    x: a1.x + unit_perpendicular.x * length_line1,
-    y: a1.y + unit_perpendicular.y * length_line1,
-  };
-  const line1_end_down = {
-    x: a1.x - unit_perpendicular.x * length_line1,
-    y: a1.y - unit_perpendicular.y * length_line1,
-  };
-  return [line1_end_up, line1_end_down];
-}
-/**
- * 根据给定的三个在一条直线上的点，获取以该直线为直径的，构成圆的四条贝塞尔曲线
- */
-
-export function getHalfCirclePoints(
-  f1: { x: number; y: number },
-  f5: { x: number; y: number },
-  f3: { x: number; y: number }
-) {
-  const c_ratio = 0.551915024494;
-  // 从右往左
-  const [rb, rt] = getVerticalPoints(f1, f5, c_ratio);
-  const [f2, f4] = getVerticalPoints(f5, f3, 1);
-  const [bl, br] = getVerticalPoints(f2, f5, c_ratio);
-  const [lt, lb] = getVerticalPoints(f3, f5, c_ratio);
-  const [tr, tl] = getVerticalPoints(f4, f5, c_ratio);
-  return [
-    // new Bezier([f1, rb, br, f2]),
-    // new Bezier([f2, bl, lb, f3]),
-    // new Bezier([f3, lt, tl, f4]),
-    // new Bezier([f4, tr, rt, f1]),
-    {
-      points: [f1, rb, br, f2],
-      _linear: false,
-    },
-    {
-      points: [f2, bl, lb, f3],
-      _linear: false,
-    },
-    {
-      points: [f3, lt, tl, f4],
-      _linear: false,
-    },
-    {
-      points: [f4, tr, rt, f1],
-      _linear: false,
-    },
-  ];
-}
-
-function getOutlineOfRect(cur: PathPoint, next: PathPoint, extra: Partial<{ radius: number }> = {}) {
-  const { radius = 20 } = extra;
-  const direction = {
-    x: next.point.x - cur.point.x,
-    y: next.point.y - cur.point.y,
-  };
-  const length = Math.sqrt(direction.x ** 2 + direction.y ** 2);
-  const unitDirection = {
-    x: direction.x / length,
-    y: direction.y / length,
-  };
-  const perpendicularDirection = {
-    x: -unitDirection.y,
-    y: unitDirection.x,
-  };
-  const offset = {
-    x: radius * perpendicularDirection.x,
-    y: radius * perpendicularDirection.y,
-  };
-
-  // 计算四个坐标
-  const a1 = {
-    x: cur.point.x + offset.x,
-    y: cur.point.y + offset.y,
-  };
-  const a2 = {
-    x: next.point.x + offset.x,
-    y: next.point.y + offset.y,
-  };
-  const a3 = {
-    x: cur.point.x - offset.x,
-    y: cur.point.y - offset.y,
-  };
-  const a4 = {
-    x: next.point.x - offset.x,
-    y: next.point.y - offset.y,
-  };
-  const a13 = {
-    x: (a3.x - a1.x) / 2 + a1.x,
-    y: (a3.y - a1.y) / 2 + a1.y,
-  };
-  const a24 = {
-    x: (a4.x - a2.x) / 2 + a2.x,
-    y: (a4.y - a2.y) / 2 + a2.y,
-  };
-  return {
-    curves: [
-      // new Bezier([a3, a13, a1]),
-      // new Bezier([a1, a2, a2]),
-      // new Bezier([a2, a24, a4]),
-      // new Bezier([a4, a3, a3]),
-      {
-        points: [a3, a13, a1],
-        _linear: true,
-      },
-      {
-        points: [a1, a2, a2],
-        _linear: true,
-        _3d: false,
-      },
-      {
-        points: [a2, a24, a4],
-        _linear: true,
-      },
-      {
-        points: [a4, a3, a3],
-        _linear: true,
-        _3d: false,
-      },
-    ],
-  };
-}
-
-/**
- * 计算两条线段的交点
- */
-function getLineIntersection(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number },
-  p3: { x: number; y: number },
-  p4: { x: number; y: number }
-) {
-  const a1 = p2.y - p1.y;
-  const b1 = p1.x - p2.x;
-  const c1 = a1 * p1.x + b1 * p1.y;
-  const a2 = p4.y - p3.y;
-  const b2 = p3.x - p4.x;
-  const c2 = a2 * p3.x + b2 * p3.y;
-  const delta = a1 * b2 - a2 * b1;
-  if (delta === 0) {
-    return null;
-  }
-  const intersectionX = (b2 * c1 - b1 * c2) / delta;
-  const intersectionY = (a1 * c2 - a2 * c1) / delta;
-  return { x: intersectionX, y: intersectionY };
-}
-function calculateLineLength(p1: { x: number; y: number }, p2: { x: number; y: number }) {
-  const { x: x1, y: y1 } = p1;
-  const { x: x2, y: y2 } = p2;
-  const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-  return length;
-}
-function toFixPoint(pos: { x: number; y: number }) {
-  return {
-    x: parseFloat(pos.x.toFixed(2)),
-    y: parseFloat(pos.y.toFixed(2)),
-  };
-}
-function toFixValue(v: number) {
-  return parseFloat(v.toFixed(2));
+  return paths;
 }
