@@ -76,6 +76,21 @@ export function BezierPath(props: BezierPathProps) {
     _fill.color = fill.color;
   }
   let _closed = false;
+  let _min_x = 0;
+  let _min_y = 0;
+  let _max_x = 0;
+  let _max_y = 0;
+  const first = points[0];
+  if (first) {
+    const { x, y } = first.point.pos;
+    _max_x = x;
+    _max_y = y;
+    _min_x = x;
+    _min_y = y;
+  }
+  /** 一个 <path d="" 标签中，可能有多条路径，该变量指向下一条在同个标签内的路径 */
+  let _next: unknown | null = null;
+  let _prev: unknown | null = null;
   const _state = {
     stroke: _stroke,
     fill: _fill,
@@ -107,6 +122,30 @@ export function BezierPath(props: BezierPathProps) {
     },
     setClosed() {
       _closed = true;
+    },
+    get next() {
+      const r = _next as BezierPath;
+      return r;
+    },
+    setNext(v: unknown) {
+      _next = v;
+    },
+    get prev() {
+      const r = _prev as BezierPath;
+      return r;
+    },
+    setPrev(v: unknown) {
+      _prev = v;
+    },
+    get size() {
+      return {
+        x: _min_x,
+        y: _min_y,
+        width: _max_x - _min_x,
+        height: _max_y - _min_y,
+        x2: _max_x,
+        y2: _max_y,
+      };
     },
     get state() {
       return _state;
@@ -166,6 +205,26 @@ export function BezierPath(props: BezierPathProps) {
       });
       _path_points.push(point);
       refresh_bezier_points();
+      const { x, y } = point.point.pos;
+      // console.log("append point", point.start, x, y);
+      if (point.start) {
+        _max_x = x;
+        _max_y = y;
+        _min_x = x;
+        _min_y = y;
+      }
+      if (x < _min_x) {
+        _min_x = x;
+      }
+      if (y < _min_y) {
+        _min_y = y;
+      }
+      if (x > _max_x) {
+        _max_x = x;
+      }
+      if (y > _max_y) {
+        _max_y = y;
+      }
       // _bezier_points.push(...mapToBezierPoints(_path_points));
       bus.emit(Events.PointCountChange);
     },

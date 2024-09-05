@@ -281,7 +281,7 @@ export function calculateCircleCenter(a1: { x: number; y: number }, a2: { x: num
     y2 = a2.y;
   const dx = x2 - x1;
   const dy = y2 - y1;
-  const d = Math.sqrt(dx * dx + dy * dy);
+  const d = parseFloat(Math.sqrt(dx * dx + dy * dy).toFixed(1));
   if (d > 2 * r) {
     console.log("The points are too far apart for the given radius.");
     return null;

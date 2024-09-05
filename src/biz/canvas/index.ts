@@ -6,6 +6,7 @@ import {
   isCollinear,
   toBase64,
   calculateCircleArcs,
+  getSymmetricPoints,
 } from "@/biz/path_point/utils";
 import { BezierPath } from "@/biz/bezier_path";
 import { BezierPoint } from "@/biz/bezier_point";
@@ -39,12 +40,15 @@ export function Canvas(props: CanvasProps) {
     width: 0,
     height: 0,
   };
+  let _dpr = 1;
   /** 网格区域信息 */
   let _grid = {
     x: 0,
     y: 0,
     width: 512,
     height: 512,
+    lineWidth: 0.5,
+    color: "#cccccc",
     // width: 600,
     // height: 600,
     // width: 1024,
@@ -160,8 +164,14 @@ export function Canvas(props: CanvasProps) {
     get state() {
       return _state;
     },
+    get size() {
+      return _size;
+    },
     setSize(size: { width: number; height: number }) {
       Object.assign(_size, size);
+    },
+    setDPR(v: number) {
+      _dpr = v;
     },
     get grid() {
       return _grid;
@@ -169,45 +179,37 @@ export function Canvas(props: CanvasProps) {
     setGrid(grid: { x: number; y: number; width?: number; height?: number }) {
       Object.assign(_grid, grid);
     },
-    normalizeX(
-      v: number,
-      extra: Partial<{ scale: number; precision: number; pureValue: boolean; isExport: boolean }> = {}
-    ) {
-      const { scale = 1, precision = 2, pureValue, isExport } = extra;
-      // const offset = pureValue ? 0 : _grid.x;
+    normalizeX(v: number, extra: Partial<{ scale: number; precision: number; isExport: boolean }> = {}) {
+      const { scale = 1, precision = 2, isExport } = extra;
       const offset = 0;
       const v1 = v * scale;
       const v2 = isExport ? v1 - offset : v1 + offset;
       const x = parseFloat(v2.toFixed(precision));
       return x;
+      // return v;
     },
-    normalizeY(
-      v: number,
-      extra: Partial<{ scale: number; precision: number; pureValue: boolean; isExport: boolean }> = {}
-    ) {
-      const { scale = 1, precision = 2, pureValue, isExport } = extra;
-      // const offset = pureValue ? 0 : _grid.y;
+    normalizeY(v: number, extra: Partial<{ scale: number; precision: number; isExport: boolean }> = {}) {
+      const { scale = 1, precision = 2, isExport } = extra;
       const offset = 0;
       const v1 = v * scale;
       const v2 = isExport ? v1 - offset : v1 + offset;
       const y = parseFloat(v2.toFixed(precision));
       return y;
+      // return v;
     },
     translateX(v: number) {
       return v + _grid.x;
+      // return v;
     },
     translateY(v: number) {
       return v + _grid.y;
+      // return v;
     },
     translate(pos: { x: number; y: number }) {
       return {
-        x: pos.x + _grid.x,
-        y: pos.y + _grid.y,
+        x: this.translateX(pos.x),
+        y: this.translateY(pos.y),
       };
-      // return {
-      //   x: pos.x,
-      //   y: pos.y,
-      // };
     },
     transformPos(pos: { x: number; y: number }, extra: Partial<{ scale: number; precision: number }> = {}) {
       const x = this.normalizeX(pos.x, extra);
@@ -234,6 +236,7 @@ export function Canvas(props: CanvasProps) {
     },
     cancelCursor() {
       _cursor_editing = 0;
+      bus.emit(Events.Update);
       bus.emit(Events.Change, { ..._state });
     },
     selectCursor() {
@@ -392,14 +395,15 @@ export function Canvas(props: CanvasProps) {
       const { dimensions } = data;
       const xExtra = {
         exp: false,
-        scale: dimensions ? dimensions.width / _grid.width : 1,
+        scale: dimensions ? _grid.width / dimensions.width : 1,
       };
       const yExtra = {
         exp: false,
-        scale: dimensions ? dimensions.height / _grid.height : 1,
+        scale: dimensions ? _grid.height / dimensions.height : 1,
       };
-      for (let i = 0; i < data.paths.length; i += 1) {
-        const pathPayload = data.paths[i];
+      // console.log("extra", xExtra.scale, yExtra.scale, dimensions, _grid.width, _grid.height);
+      for (let j = 0; j < data.paths.length; j += 1) {
+        const pathPayload = data.paths[j];
         const content = pathPayload.d;
         const tokens = SVGParser.parse_path(content);
         let cur_path: BezierPath | null = null;
@@ -413,6 +417,7 @@ export function Canvas(props: CanvasProps) {
         }
         console.log("tokens", tokens);
         for (let i = 0; i < tokens.length; i += 1) {
+          const prev = tokens[i - 1];
           const cur = tokens[i];
           const next = tokens[i + 1];
           const [command, ...args] = cur;
@@ -431,7 +436,7 @@ export function Canvas(props: CanvasProps) {
               p = this.translate(p);
             }
             prev_point = p;
-            // console.log("create point", command, p);
+            // console.log("create a start point", command, p);
             const point = PathPoint({
               point: BezierPoint(p),
               from: null,
@@ -441,7 +446,7 @@ export function Canvas(props: CanvasProps) {
             });
             start_path_point = point;
             cur_path_point = point;
-            cur_path = BezierPath({
+            const new_path = BezierPath({
               points: [point],
               fill: pathPayload.fill
                 ? {
@@ -455,7 +460,13 @@ export function Canvas(props: CanvasProps) {
                   }
                 : null,
             });
-            paths.push(cur_path);
+            paths.push(new_path);
+            if (i !== 0 && cur_path) {
+              // 在一个 <path d="" 路径中，有多个开头，就把当前这个和前一个 关联 起来
+              // cur_path.setNext(new_path);
+              new_path.setPrev(cur_path);
+            }
+            cur_path = new_path;
           }
           if (["Z", "z"].includes(command) && cur_path && start_path_point) {
             start_path_point.setEnd(true);
@@ -484,10 +495,6 @@ export function Canvas(props: CanvasProps) {
               prev_point = p2;
               const is_reverse = p1.x > p2.x;
               const centers = calculateCircleCenter(p1, p2, radius);
-              if (!centers) {
-                console.log("original", rx, p1.x, p1.y, p1.x + x, p1.y + y);
-                console.log("translate", radius, p1.x, p1.y, p2.x, p2.y);
-              }
               if (centers) {
                 const [index1, index2] = (() => {
                   if (t1 === 0 && t2 === 0) {
@@ -576,17 +583,11 @@ export function Canvas(props: CanvasProps) {
             if (["V", "v", "H", "h"].includes(next_command)) {
               let distance = (() => {
                 const v = next_values[0];
-                if (next_command === "H") {
+                if (["H", "h"].includes(next_command)) {
                   return this.normalizeX(v, xExtra);
                 }
-                if (next_command === "V") {
+                if (["V", "v"].includes(next_command)) {
                   return this.normalizeY(v, yExtra);
-                }
-                if (next_command === "h") {
-                  return this.normalizeX(v, { ...xExtra, pureValue: true });
-                }
-                if (next_command === "v") {
-                  return this.normalizeY(v, { ...yExtra, pureValue: true });
                 }
                 return v;
               })();
@@ -595,23 +596,25 @@ export function Canvas(props: CanvasProps) {
                 y: 0,
               };
               if (next_command === "H") {
-                p.x = distance;
+                p.x = this.translateX(distance);
                 p.y = prev_point.y;
-                p = this.translate(p);
+                // p = this.translate(p);
               }
               if (next_command === "V") {
                 p.x = prev_point.x;
-                p.y = distance;
-                p = this.translate(p);
+                p.y = this.translateY(distance);
+                // p = this.translate(p);
               }
               if (next_command === "h") {
                 distance += prev_point.x;
+                // p.x = this.translateX(distance);
                 p.x = distance;
                 p.y = prev_point.y;
               }
               if (next_command === "v") {
                 distance += prev_point.y;
                 p.x = prev_point.x;
+                // p.y = this.translateX(distance);
                 p.y = distance;
               }
               prev_point = p;
@@ -625,7 +628,7 @@ export function Canvas(props: CanvasProps) {
               cur_path_point = next_path_point;
               cur_path.appendPoint(next_path_point);
             }
-            if (["C", "c", "S", "s"].includes(next_command)) {
+            if (["C", "c"].includes(next_command)) {
               let v0 = next_values[0];
               let v1 = next_values[1];
               let v2 = next_values[2];
@@ -644,19 +647,7 @@ export function Canvas(props: CanvasProps) {
                 x: this.normalizeX(v2, xExtra),
                 y: this.normalizeY(v3, yExtra),
               };
-              if (["c", "s"].includes(next_command)) {
-                // a1 = {
-                //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
-                //   y: this.normalizeY(v1, { ...yExtra, pureValue: true }),
-                // };
-                // a2 = {
-                //   x: this.normalizeX(v4, { ...xExtra, pureValue: true }),
-                //   y: this.normalizeY(v5, { ...yExtra, pureValue: true }),
-                // };
-                // a3 = {
-                //   x: this.normalizeX(v2, { ...xExtra, pureValue: true }),
-                //   y: this.normalizeY(v3, { ...yExtra, pureValue: true }),
-                // };
+              if (["c"].includes(next_command)) {
                 moveTo(a1);
                 moveTo(a2);
                 moveTo(a3);
@@ -689,6 +680,43 @@ export function Canvas(props: CanvasProps) {
               });
               cur_path_point = next_path_point;
               cur_path.appendPoint(next_path_point);
+            }
+            if (["S", "s"].includes(next_command)) {
+              console.log("command S or s", !!cur_path_point, !!cur_path_point?.from, next_values);
+              if (cur_path_point && cur_path_point.from) {
+                let v0 = next_values[0];
+                let v1 = next_values[1];
+                let v2 = next_values[2];
+                let v3 = next_values[3];
+                let a2 = {
+                  x: this.normalizeX(v0, xExtra),
+                  y: this.normalizeY(v1, yExtra),
+                };
+                let a3 = {
+                  x: this.normalizeX(v2, xExtra),
+                  y: this.normalizeY(v3, yExtra),
+                };
+                if (["s"].includes(next_command)) {
+                  moveTo(a2);
+                  moveTo(a3);
+                } else {
+                  a2 = this.translate(a2);
+                  a3 = this.translate(a3);
+                }
+                prev_point = a3;
+                const a1 = getSymmetricPoints(cur_path_point.point.pos, cur_path_point.from.pos);
+                cur_path_point.setTo(BezierPoint(a1));
+                cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
+                // console.log("before create next_path_point", a2, a3);
+                const next_path_point = PathPoint({
+                  point: BezierPoint({ x: a3.x, y: a3.y }),
+                  from: BezierPoint({ x: a2.x, y: a2.y }),
+                  to: null,
+                  virtual: false,
+                });
+                cur_path_point = next_path_point;
+                cur_path.appendPoint(next_path_point);
+              }
             }
             if (["Q", "q", "T", "t"].includes(next_command)) {
               const v0 = next_values[0];

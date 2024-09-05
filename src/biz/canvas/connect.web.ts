@@ -1,10 +1,16 @@
 import { BezierPoint } from "@/biz/bezier_point";
+
 import { Canvas } from "./index";
 
 export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
+  const dpr = window.devicePixelRatio || 1;
+  // $canvas.width = width * dpr;
+  // $canvas.height = height * dpr;
   store.drawLine = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
     ctx.moveTo(p1.x, p1.y);
+    ctx.beginPath();
     ctx.lineTo(p2.x, p2.y);
+    ctx.closePath();
     ctx.stroke();
   };
   store.drawCurve = (curve: { points: { x: number; y: number }[] }) => {
@@ -19,12 +25,13 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     if (p.length === 4) {
       ctx.bezierCurveTo(p[1].x + ox, p[1].y + oy, p[2].x + ox, p[2].y + oy, p[3].x + ox, p[3].y + oy);
     }
-    ctx.stroke();
     ctx.closePath();
+    ctx.stroke();
   };
   store.drawCircle = (point: { x: number; y: number }, radius: number) => {
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
+    ctx.closePath();
     ctx.strokeStyle = "blue";
     ctx.stroke();
     ctx.fillStyle = "white";
@@ -50,7 +57,6 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     // ctx.lineTo(lineEndX, lineEndY);
     // ctx.stroke();
     const size = 3;
-    const color = "red";
 
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
@@ -84,46 +90,38 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.fill();
   };
   store.drawGrid = () => {
-    const { width, height } = $canvas;
-    const unit = 20;
-    const gridSize = store.grid.width; // 网格区域的大小
-    const startX = (width - gridSize) / 2; // 网格区域左上角的 x 坐标
-    const startY = (height - gridSize) / 2; // 网格区域左上角的 y 坐标
-    console.log(startX, startY);
-    store.setGrid({
-      x: startX,
-      y: startY,
-    });
+    const { width, height } = store.size;
+    const unit = 16;
+    const grid = store.grid;
+    const start = {
+      x: width / 2 - grid.width / 2,
+      y: height / 2 - grid.height / 2,
+    };
+    // console.log("draw grid", width, height, start, grid.height);
+    store.setGrid(start);
     ctx.beginPath();
-    // 绘制垂直线
-    for (let x = startX; x <= startX + gridSize; x += unit) {
-      ctx.moveTo(x, startY);
-      ctx.lineTo(x, startY + gridSize);
+    ctx.lineWidth = grid.lineWidth;
+    // console.log(`ctx.moveTo(${start.x}, ${start.y});`);
+    // ctx.moveTo(319.5500069260597, 173.80000376701355);
+    // ctx.moveTo(start.x, start.y);
+    // console.log(`ctx.lineTo(${start.x + grid.width}, ${start.y});`);
+    // ctx.lineTo(831.5500069260597, 173.80000376701355);
+    // ctx.lineTo(start.x + grid.width, start.y);
+    // 绘制垂直线，x 坐标从左往右移动，并绘制一条垂直线
+    for (let x = start.x; x <= start.x + grid.width; x += unit) {
+      ctx.moveTo(x, start.y);
+      // ctx.lineTo(x, start.y + grid.height / window.devicePixelRatio);
+      ctx.lineTo(x, start.y + grid.height);
     }
-    // 绘制水平线
-    for (let y = startY; y <= startY + gridSize; y += unit) {
-      ctx.moveTo(startX, y);
-      ctx.lineTo(startX + gridSize, y);
+    // 绘制水平线，y 坐标从上往下移动，并绘制一条水平线
+    for (let y = start.y; y <= start.y + grid.height; y += unit) {
+      ctx.moveTo(start.x, y);
+      // ctx.lineTo(start.x + grid.width / window.devicePixelRatio, y);
+      ctx.lineTo(start.x + grid.width, y);
     }
-    ctx.strokeStyle = "#e0e0e0";
+    ctx.closePath();
+    ctx.strokeStyle = grid.color;
     ctx.stroke();
-    // ctx.beginPath();
-    // const a1 = {
-    //   x: startX + gridSize / 2,
-    //   y: startY + 100,
-    // };
-    // const a2 = {
-    //   x: startX + gridSize / 2,
-    //   y: startY + 100 + 100,
-    // };
-    // ctx.moveTo(a1.x, a1.y);
-    // ctx.fillStyle = "black";
-    // ctx.font = "12px Arial";
-    // ctx.fillText(`${a1.x - startX},${a1.y - startY}`, a1.x + 2, a1.y - 2);
-    // ctx.lineTo(a2.x, a2.y);
-    // ctx.fillText(`${a2.x - startX},${a2.y - startY}`, a2.x + 2, a2.y - 2);
-    // ctx.strokeStyle = "red";
-    // ctx.stroke();
   };
   store.clear = () => {
     const { width, height } = $canvas;
@@ -131,12 +129,20 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.clearRect(0, 0, width, height);
   };
   const { innerWidth, innerHeight } = window;
+  // const width = innerWidth;
+  // const height = innerHeight;
+  const width = innerWidth * dpr;
+  const height = innerHeight * dpr;
   store.setSize({
-    width: innerWidth,
-    height: innerHeight,
+    width,
+    height,
   });
-  $canvas.width = innerWidth;
-  $canvas.height = innerHeight;
+  store.setDPR(dpr);
+  $canvas.width = width;
+  $canvas.height = height;
+  $canvas.style.width = `${innerWidth}px`;
+  $canvas.style.height = `${innerHeight}px`;
+  // ctx.scale(dpr, dpr);
   $canvas.addEventListener("mousedown", (evt) => {
     store.handleMouseDown({
       x: evt.offsetX,

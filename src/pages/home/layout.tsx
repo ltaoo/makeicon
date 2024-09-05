@@ -21,7 +21,7 @@ export const HomeLayout: ViewComponent = (props) => {
   return (
     <>
       <div class="flex w-full h-full bg-white">
-        <div class="flex-1 bg-slate-100">
+        <div class="flex-1">
           <div class="relative w-full h-full">
             <For each={subViews()}>
               {(subView, i) => {

@@ -115,18 +115,18 @@ export class SVGParser {
     const viewBoxMatch = content.match(/viewBox="([^"]+)"/);
     const widthMatch = content.match(/width="([^"]+)"/);
     const heightMatch = content.match(/height="([^"]+)"/);
+    if (widthMatch) {
+      result.dimensions.width = Number(widthMatch[1]);
+    }
+    if (heightMatch) {
+      result.dimensions.height = Number(heightMatch[1]);
+    }
     if (viewBoxMatch) {
       const viewBox = viewBoxMatch[1].split(" ").map(Number);
       if (viewBox.length === 4) {
         result.dimensions.width = viewBox[2];
         result.dimensions.height = viewBox[3];
       }
-    }
-    if (widthMatch) {
-      result.dimensions.width = Number(widthMatch[1]);
-    }
-    if (heightMatch) {
-      result.dimensions.height = Number(heightMatch[1]);
     }
 
     // 提取所有 path 元素及其属性
