@@ -27,6 +27,7 @@ export function BezierPoint(props: BezierPointProps) {
   };
 
   return {
+    SymbolTag: "BezierPoint" as const,
     get uid() {
       return _uid;
     },

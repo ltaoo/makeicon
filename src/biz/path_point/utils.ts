@@ -249,3 +249,75 @@ export function toFixPoint(pos: { x: number; y: number }) {
 export function toFixValue(v: number) {
   return parseFloat(v.toFixed(2));
 }
+
+/**
+ * 计算三个点，是否在一条直线上。以及，a2 是否是该直线的中点
+ */
+export function isCollinear(a1: { x: number; y: number }, a2: { x: number; y: number }, a3: { x: number; y: number }) {
+  const x1 = a1.x;
+  const y1 = a1.y;
+  const x2 = a2.x;
+  const y2 = a2.y;
+  const x3 = a3.x;
+  const y3 = a3.y;
+  // 判断是否共线
+  const collinear = (y2 - y1) * (x3 - x2) === (y3 - y2) * (x2 - x1);
+  // 判断是否是中点
+  // const midpoint = x2 == (x1 + x3) / 2 && y2 == (y1 + y3) / 2;
+  const midpoint = x2 - x1 === x3 - x2 && y2 - y1 === y3 - y2;
+  return {
+    collinear,
+    midpoint,
+  };
+}
+
+/**
+ * 已知一个圆的半径，和任意圆上两个点坐标，计算圆心位置
+ */
+export function calculateCircleCenter(a1: { x: number; y: number }, a2: { x: number; y: number }, r: number) {
+  const x1 = a1.x,
+    y1 = a1.y,
+    x2 = a2.x,
+    y2 = a2.y;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  if (d > 2 * r) {
+    console.log("The points are too far apart for the given radius.");
+    return null;
+  }
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const h = Math.sqrt(r * r - (d / 2) * (d / 2));
+  const unitX = -dy / d;
+  const unitY = dx / d;
+  const center1 = { x: mx + h * unitX, y: my + h * unitY };
+  const center2 = { x: mx - h * unitX, y: my - h * unitY };
+  return [center2, center1];
+}
+
+export function calculateCircleArcs(
+  center: { x: number; y: number },
+  pointA: { x: number; y: number },
+  pointB: { x: number; y: number }
+) {
+  const centerX = center.x,
+    centerY = center.y;
+  const angleA = Math.atan2(pointA.y - centerY, pointA.x - centerX);
+  const angleB = Math.atan2(pointB.y - centerY, pointB.x - centerX);
+  const startAngle = angleA;
+  let endAngle = angleB;
+  if (startAngle > endAngle) {
+    endAngle += 2 * Math.PI;
+  }
+  return [
+    {
+      start: startAngle,
+      end: endAngle,
+    },
+    {
+      start: endAngle,
+      end: startAngle + 2 * Math.PI,
+    },
+  ];
+}

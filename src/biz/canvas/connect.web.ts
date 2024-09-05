@@ -71,7 +71,6 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     // 菱形左点
     const diamondLeftX = p2.x - unitX * size;
     const diamondLeftY = p2.y - unitY * size;
-
     // 绘制菱形
     ctx.beginPath();
     ctx.moveTo(diamondTopX, diamondTopY);
@@ -79,7 +78,7 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.lineTo(diamondBottomX, diamondBottomY);
     ctx.lineTo(diamondLeftX, diamondLeftY);
     ctx.closePath();
-    ctx.strokeStyle = "blue";
+    ctx.strokeStyle = "#9e9eff";
     ctx.stroke();
     ctx.fillStyle = "white";
     ctx.fill();
@@ -87,14 +86,13 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
   store.drawGrid = () => {
     const { width, height } = $canvas;
     const unit = 20;
-    const gridSize = 400; // 网格区域的大小
+    const gridSize = store.grid.width; // 网格区域的大小
     const startX = (width - gridSize) / 2; // 网格区域左上角的 x 坐标
     const startY = (height - gridSize) / 2; // 网格区域左上角的 y 坐标
+    console.log(startX, startY);
     store.setGrid({
       x: startX,
       y: startY,
-      width: gridSize,
-      height: gridSize,
     });
     ctx.beginPath();
     // 绘制垂直线

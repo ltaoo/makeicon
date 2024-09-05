@@ -12,14 +12,31 @@ type TheTypesOfEvents = {
   [Events.ToOrFromChange]: void;
 };
 export enum PathPointMirrorTypes {
+  /** 不对称，角度和长度都不同 */
   NoMirror = 1,
+  /** 角度对称，长度可以不同 */
   MirrorAngle = 2,
+  /** 完全对称，角度和长度完全相同 */
   MirrorAngleAndLength = 3,
+  /** 直角，没有控制点 */
+  Angle = 4,
 }
+export type CircleCurved = {
+  // start: { x: number; y: number };
+  center: { x: number; y: number };
+  radius: number;
+  // rotate: number;
+  arc: { start: number; end: number };
+  /** 是否逆时针 */
+  counterclockwise: boolean;
+  // opt: number[];
+};
 type PathPointProps = {
   point: BezierPoint;
   from: null | BezierPoint;
   to: null | BezierPoint;
+  // 是个圆。@todo 这样设计不太好，还是按 线条 逻辑，不是 点 逻辑
+  circle?: CircleCurved;
   start?: boolean;
   end?: boolean;
   /** 未确定，预览 */
@@ -30,12 +47,12 @@ type PathPointProps = {
 export function PathPoint(props: PathPointProps) {
   const bus = base<TheTypesOfEvents>();
 
-  const { point, from, to, start = false, end = false, virtual = true, mirror } = props;
+  const { point, from, to, circle, start = false, end = false, virtual = true, mirror } = props;
 
   let _point = point;
   let _from = from;
   let _to = to;
-  let _mirror = mirror || PathPointMirrorTypes.NoMirror;
+  let _mirror = mirror || PathPointMirrorTypes.Angle;
   /** 表示还在移动，没有确定的坐标 */
   let _virtual = virtual;
   /** 表示隐藏，不绘制 */
@@ -48,6 +65,7 @@ export function PathPoint(props: PathPointProps) {
     const symPoint = getSymmetricPoints({ x: point.x, y: point.y }, _to);
     _from = BezierPoint(symPoint);
   }
+  let _circle = circle;
   let _start = start;
   let _end = end;
   let _closed = false;
@@ -94,6 +112,7 @@ export function PathPoint(props: PathPointProps) {
   }
 
   return {
+    SymbolTag: "PathPoint" as const,
     get x() {
       return _point.x;
     },
@@ -145,6 +164,12 @@ export function PathPoint(props: PathPointProps) {
       }
       bus.emit(Events.ToOrFromChange);
     },
+    get circle() {
+      return _circle;
+    },
+    setCircle(v: CircleCurved) {
+      _circle = v;
+    },
     /** 是否是路径的起点 */
     get start() {
       return _start;
@@ -179,8 +204,33 @@ export function PathPoint(props: PathPointProps) {
     get mirror() {
       return _mirror;
     },
-    setMirror(type: PathPointMirrorTypes) {
+    setMirror(type: PathPointMirrorTypes, extra: Partial<{ silence: boolean }> = {}) {
+      const { silence = true } = extra;
+      const cur = _mirror;
+      if (cur === type) {
+        return;
+      }
       _mirror = type;
+      if (silence) {
+        return;
+      }
+      if (type === PathPointMirrorTypes.MirrorAngleAndLength) {
+      }
+      if (type === PathPointMirrorTypes.MirrorAngle) {
+        if (cur === PathPointMirrorTypes.MirrorAngleAndLength) {
+          // 之前是完全对称，改成角度对称，不用任何调整
+          return;
+        }
+      }
+      if (type === PathPointMirrorTypes.NoMirror) {
+        return;
+      }
+      if (type === PathPointMirrorTypes.Angle) {
+        _from = null;
+        _to = null;
+        bus.emit(Events.ToOrFromChange);
+        return;
+      }
     },
     get state() {
       return _state;

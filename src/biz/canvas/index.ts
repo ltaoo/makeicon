@@ -1,17 +1,22 @@
 import { base, Handler } from "@/domains/base";
-import { PathPoint, PathPointMirrorTypes } from "@/biz/path_point";
-import { getSymmetricPoint2, toBase64 } from "@/biz/path_point/utils";
+import { CircleCurved, PathPoint, PathPointMirrorTypes } from "@/biz/path_point";
+import {
+  calculateCircleCenter,
+  getSymmetricPoint2,
+  isCollinear,
+  toBase64,
+  calculateCircleArcs,
+} from "@/biz/path_point/utils";
 import { BezierPath } from "@/biz/bezier_path";
 import { BezierPoint } from "@/biz/bezier_point";
+import { SVGParser } from "@/biz/svg/parser";
 
 const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
 
 enum Events {
   Update,
+  Change,
 }
-type TheTypesOfEvents = {
-  [Events.Update]: void;
-};
 type CanvasProps = {
   paths: BezierPath[];
 };
@@ -38,9 +43,14 @@ export function Canvas(props: CanvasProps) {
   let _grid = {
     x: 0,
     y: 0,
-    width: 0,
-    height: 0,
+    width: 512,
+    height: 512,
+    // width: 600,
+    // height: 600,
+    // width: 1024,
+    // height: 1024,
   };
+  /** 两种情况，钢笔工具时，确定了坐标点，开始拖动改变控制点位置；移动工具时，点击了点，开始拖动改变点位置 */
   let _prepare_dragging = false;
   let _moving_for_new_line = false;
   /** 当前是否处于拖动 坐标点或锚点 */
@@ -56,9 +66,24 @@ export function Canvas(props: CanvasProps) {
   let _cur_point: BezierPoint | null = null;
   let _cur_path: BezierPath | null = null;
   /** 当前是否激活钢笔工具 */
-  let _pen_editing = 1;
+  let _pen_editing = 0;
+  /** 当前是否激活选择工具 */
+  let _cursor_editing = 0;
   let _events: (() => void)[] = [];
   let _debug = false;
+
+  let _state = {
+    get cursor() {
+      return _cursor_editing;
+    },
+    get pen() {
+      return _pen_editing;
+    },
+  };
+  type TheTypesOfEvents = {
+    [Events.Update]: void;
+    [Events.Change]: typeof _state;
+  };
   // 事件
   const bus = base<TheTypesOfEvents>();
 
@@ -101,10 +126,13 @@ export function Canvas(props: CanvasProps) {
       path_points.push(...path.path_points);
     }
     _points = points;
+    // console.log("_points count", _points.length);
     _path_points = path_points;
+    // console.log("_path_points count", _path_points.length);
   }
 
   return {
+    SymbolTag: "Canvas" as const,
     drawLine(p1: { x: number; y: number }, p2: { x: number; y: number }) {
       console.log("请实现 drawLine 方法");
     },
@@ -129,42 +157,57 @@ export function Canvas(props: CanvasProps) {
     clear() {
       console.log("请实现 clear 方法");
     },
+    get state() {
+      return _state;
+    },
     setSize(size: { width: number; height: number }) {
       Object.assign(_size, size);
     },
     get grid() {
       return _grid;
     },
-    setGrid(grid: { x: number; y: number; width: number; height: number }) {
+    setGrid(grid: { x: number; y: number; width?: number; height?: number }) {
       Object.assign(_grid, grid);
     },
-    normalizeX(v: number, extra: Partial<{ scale: number; precision: number; exp: boolean }> = {}) {
-      const { scale = 1, precision = 2, exp = true } = extra;
-      const x = parseFloat(
-        (
-          (() => {
-            if (exp) {
-              return v - _grid.x;
-            }
-            return v + _grid.x;
-          })() * scale
-        ).toFixed(precision)
-      );
+    normalizeX(
+      v: number,
+      extra: Partial<{ scale: number; precision: number; pureValue: boolean; isExport: boolean }> = {}
+    ) {
+      const { scale = 1, precision = 2, pureValue, isExport } = extra;
+      // const offset = pureValue ? 0 : _grid.x;
+      const offset = 0;
+      const v1 = v * scale;
+      const v2 = isExport ? v1 - offset : v1 + offset;
+      const x = parseFloat(v2.toFixed(precision));
       return x;
     },
-    normalizeY(v: number, extra: Partial<{ scale: number; precision: number; exp: boolean }> = {}) {
-      const { scale = 1, precision = 2, exp = true } = extra;
-      const y = parseFloat(
-        (
-          (() => {
-            if (exp) {
-              return v - _grid.y;
-            }
-            return v + _grid.y;
-          })() * scale
-        ).toFixed(precision)
-      );
+    normalizeY(
+      v: number,
+      extra: Partial<{ scale: number; precision: number; pureValue: boolean; isExport: boolean }> = {}
+    ) {
+      const { scale = 1, precision = 2, pureValue, isExport } = extra;
+      // const offset = pureValue ? 0 : _grid.y;
+      const offset = 0;
+      const v1 = v * scale;
+      const v2 = isExport ? v1 - offset : v1 + offset;
+      const y = parseFloat(v2.toFixed(precision));
       return y;
+    },
+    translateX(v: number) {
+      return v + _grid.x;
+    },
+    translateY(v: number) {
+      return v + _grid.y;
+    },
+    translate(pos: { x: number; y: number }) {
+      return {
+        x: pos.x + _grid.x,
+        y: pos.y + _grid.y,
+      };
+      // return {
+      //   x: pos.x,
+      //   y: pos.y,
+      // };
     },
     transformPos(pos: { x: number; y: number }, extra: Partial<{ scale: number; precision: number }> = {}) {
       const x = this.normalizeX(pos.x, extra);
@@ -184,22 +227,31 @@ export function Canvas(props: CanvasProps) {
     getCurPath() {
       return _cur_path;
     },
-    cancelPen() {
-      const path = _cur_path;
-      if (!path) {
-        return;
-      }
+    cancelPen() {},
+    selectPen() {
+      _pen_editing = 1;
+      bus.emit(Events.Change, { ..._state });
+    },
+    cancelCursor() {
+      _cursor_editing = 0;
+      bus.emit(Events.Change, { ..._state });
+    },
+    selectCursor() {
+      _cursor_editing = 1;
       if (_pen_editing) {
+        const path = _cur_path;
+        if (!path) {
+          return;
+        }
         path.removeLastPoint();
+        return;
       }
       _pen_editing = 0;
       _cur_path_point = null;
       _cur_point = null;
       updatePoints();
       bus.emit(Events.Update);
-    },
-    selectPen() {
-      _pen_editing = 1;
+      bus.emit(Events.Change, { ..._state });
     },
     exportSVG(options: Partial<{ cap: "round" | "none" }> = {}) {
       const scale = 1;
@@ -209,39 +261,67 @@ export function Canvas(props: CanvasProps) {
       let d = "";
       for (let i = 0; i < _paths.length; i += 1) {
         const path = _paths[i];
-        const { outline } = path.buildOutline({ cap: options.cap, scene: 1 });
-        const first = outline[0];
-        if (!first) {
-          svg += "</svg>";
-          return svg;
-        }
-        // ctx.beginPath();
-        for (let i = 0; i < outline.length; i += 1) {
-          const curve = outline[i];
-          const [start, c1, c2, end] = curve.points;
-          // console.log(start, c1, c2, end);
-          if (i === 0 && start) {
-            d += `M${this.transformPos(start, { scale }).join(" ")}`;
+        // const { outline } = path.buildOutline({ cap: options.cap, scene: 1 });
+        // const first = outline[0];
+        // if (!first) {
+        //   svg += "</svg>";
+        //   return svg;
+        // }
+        // for (let i = 0; i < outline.length; i += 1) {
+        //   const curve = outline[i];
+        //   const [start, c1, c2, end] = curve.points;
+        //   // console.log(start, c1, c2, end);
+        //   if (i === 0 && start) {
+        //     d += `M${this.transformPos(start, { scale }).join(" ")}`;
+        //   }
+        //   (() => {
+        //     if (curve._linear) {
+        //       d += `L${this.transformPos(c2, { scale }).join(" ")}`;
+        //       return;
+        //     }
+        //     if (end) {
+        //       d += `C${[
+        //         ...this.transformPos(c1, { scale }),
+        //         ...this.transformPos(c2, { scale }),
+        //         ...this.transformPos(end, { scale }),
+        //       ].join(" ")}`;
+        //       return;
+        //     }
+        //     d += `Q${[...this.transformPos(c1, { scale }), ...this.transformPos(c2, { scale })].join(" ")}`;
+        //   })();
+        // }
+        // d += "Z";
+        const commands = path.buildCommands();
+        for (let i = 0; i < commands.length; i += 1) {
+          const { c, a } = commands[i];
+          if (i === 0) {
+            d += `M${this.transformPos({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
           }
           (() => {
-            if (curve._linear) {
-              d += `L${this.transformPos(c2, { scale }).join(" ")}`;
+            if (c === "L") {
+              d += `L${this.transformPos({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
               return;
             }
-            if (end) {
+            if (c === "C") {
               d += `C${[
-                ...this.transformPos(c1, { scale }),
-                ...this.transformPos(c2, { scale }),
-                ...this.transformPos(end, { scale }),
+                ...this.transformPos({ x: a[0], y: a[1] }, { scale }),
+                ...this.transformPos({ x: a[2], y: a[3] }, { scale }),
+                ...this.transformPos({ x: a[4], y: a[5] }, { scale }),
               ].join(" ")}`;
               return;
             }
-            d += `Q${[...this.transformPos(c1, { scale }), ...this.transformPos(c2, { scale })].join(" ")}`;
+            if (c === "Q") {
+              d += `Q${[
+                ...this.transformPos({ x: a[0], y: a[1] }, { scale }),
+                ...this.transformPos({ x: a[2], y: a[3] }, { scale }),
+              ].join(" ")}`;
+            }
           })();
         }
-        d += "Z";
       }
       svg += `<path d="${d}" fill="#111111" id="svg_1" />`;
+      // if (path.state.stroke.enabled) {
+      // }
       svg += "</g></svg>";
       return svg;
     },
@@ -262,33 +342,426 @@ export function Canvas(props: CanvasProps) {
     get paths() {
       return _paths;
     },
-    setPaths(paths: BezierPath[], extra: Partial<{ transform: boolean }> = {}) {
+    setPaths(
+      paths: BezierPath[],
+      extra: Partial<{ transform: boolean; dimensions: { width: number; height: number } }> = {}
+    ) {
       _paths = paths;
-      if (extra.transform) {
-        for (let i = 0; i < _paths.length; i += 1) {
-          const path = _paths[i];
-          path.points.forEach((point) => {
-            point.setXY({
-              x: this.normalizeX(point.x, { exp: false }),
-              y: this.normalizeY(point.y, { exp: false }),
+      updatePoints();
+      // if (extra.transform) {
+      //   for (let i = 0; i < _paths.length; i += 1) {
+      //     const path = _paths[i];
+      //     const circle_point = path.path_points.find((p) => p.circle);
+      //     if (circle_point && circle_point.circle) {
+      //       circle_point.setCircle({
+      //         center: {
+      //           x: this.normalizeX(circle_point.circle.center.x, {
+      //             exp: false,
+      //             scale: extra.dimensions ? extra.dimensions.width / _grid.width : 1,
+      //           }),
+      //           y: this.normalizeY(circle_point.circle.center.y, {
+      //             exp: false,
+      //             scale: extra.dimensions ? extra.dimensions.height / _grid.height : 1,
+      //           }),
+      //         },
+      //         counterclockwise: circle_point.circle.counterclockwise,
+      //         radius: circle_point.circle.radius * (extra.dimensions ? extra.dimensions.width / _grid.width : 1),
+      //         arc: circle_point.circle.arc,
+      //       });
+      //     }
+      //     console.log('points count is', path.points.length);
+      //     path.points.forEach((point) => {
+      //       point.setXY({
+      //         x: this.normalizeX(point.x, {
+      //           exp: false,
+      //           scale: extra.dimensions ? extra.dimensions.width / _grid.width : 1,
+      //         }),
+      //         y: this.normalizeY(point.y, {
+      //           exp: false,
+      //           scale: extra.dimensions ? extra.dimensions.height / _grid.height : 1,
+      //         }),
+      //       });
+      //     });
+      //   }
+      // }
+      bus.emit(Events.Update);
+    },
+    buildBezierPathsFromPathString(svg: string) {
+      const data = SVGParser.parse_svg(svg);
+      const paths = [];
+      const { dimensions } = data;
+      const xExtra = {
+        exp: false,
+        scale: dimensions ? dimensions.width / _grid.width : 1,
+      };
+      const yExtra = {
+        exp: false,
+        scale: dimensions ? dimensions.height / _grid.height : 1,
+      };
+      for (let i = 0; i < data.paths.length; i += 1) {
+        const pathPayload = data.paths[i];
+        const content = pathPayload.d;
+        const tokens = SVGParser.parse_path(content);
+        let cur_path: BezierPath | null = null;
+        let cur_path_point: PathPoint | null = null;
+        let prev_path_point: PathPoint | null = null;
+        let prev_point = { x: 0, y: 0 };
+        let start_path_point: PathPoint | null = null;
+        function moveTo(p: { x: number; y: number }, extra: Partial<{ is_relative: boolean }> = {}) {
+          p.x += prev_point.x;
+          p.y += prev_point.y;
+        }
+        console.log("tokens", tokens);
+        for (let i = 0; i < tokens.length; i += 1) {
+          const cur = tokens[i];
+          const next = tokens[i + 1];
+          const [command, ...args] = cur;
+          const values = args.map((v) => Number(v));
+          // console.log("cur command is", command);
+          if (["M", "m"].includes(command)) {
+            let v0 = values[0];
+            let v1 = values[1];
+            let p = {
+              x: this.normalizeX(v0, xExtra),
+              y: this.normalizeX(v1, yExtra),
+            };
+            if (command === "m") {
+              moveTo(p);
+            } else {
+              p = this.translate(p);
+            }
+            prev_point = p;
+            // console.log("create point", command, p);
+            const point = PathPoint({
+              point: BezierPoint(p),
+              from: null,
+              to: null,
+              start: true,
+              virtual: false,
             });
-          });
+            start_path_point = point;
+            cur_path_point = point;
+            cur_path = BezierPath({
+              points: [point],
+              fill: pathPayload.fill
+                ? {
+                    color: pathPayload.fill,
+                  }
+                : null,
+              stroke: pathPayload.stroke
+                ? {
+                    color: pathPayload.stroke,
+                    width: pathPayload.strokeWidth || 1,
+                  }
+                : null,
+            });
+            paths.push(cur_path);
+          }
+          if (["Z", "z"].includes(command) && cur_path && start_path_point) {
+            start_path_point.setEnd(true);
+            start_path_point.setClosed();
+            cur_path.setClosed();
+          }
+          if (next && cur_path) {
+            const [next_command, ...next_args] = next;
+            const next_values = next_args.map((v) => Number(v));
+            // console.log("next command is", next_command);
+            if (["A", "a"].includes(next_command)) {
+              const [rx, ry, rotate, t1, t2, x, y] = next_values;
+              // @todo 这里是默认必定是圆形，但也可能是椭圆，后面支持吧。
+              let p1 = { ...prev_point };
+              let p2 = { x: this.normalizeX(x, xExtra), y: this.normalizeY(y, yExtra) };
+              const radius = this.normalizeX(rx, xExtra);
+              if (next_command === "a") {
+                // p2 = {
+                //   x: this.normalizeX(x, { ...xExtra, pureValue: true }),
+                //   y: this.normalizeY(y, { ...yExtra, pureValue: true }),
+                // };
+                moveTo(p2);
+              } else {
+                p2 = this.translate(p2);
+              }
+              prev_point = p2;
+              const is_reverse = p1.x > p2.x;
+              const centers = calculateCircleCenter(p1, p2, radius);
+              if (!centers) {
+                console.log("original", rx, p1.x, p1.y, p1.x + x, p1.y + y);
+                console.log("translate", radius, p1.x, p1.y, p2.x, p2.y);
+              }
+              if (centers) {
+                const [index1, index2] = (() => {
+                  if (t1 === 0 && t2 === 0) {
+                    return [0, 1];
+                  }
+                  if (t1 === 0 && t2 === 1) {
+                    return [1, 0];
+                  }
+                  if (t1 === 1 && t2 === 0) {
+                    return [1, 1];
+                  }
+                  if (t1 === 1 && t2 === 1) {
+                    return [0, 0];
+                  }
+                  return [0, 1];
+                })();
+                const center = centers[index1];
+                // console.log("centers", centers, center, index1);
+                const arcs = calculateCircleArcs(center, p1, p2);
+                const arc = arcs[index2];
+                const circle: CircleCurved = {
+                  center,
+                  radius,
+                  arc,
+                  counterclockwise: (() => {
+                    if (t1 === 0 && t2 === 0) {
+                      // if (is_reverse) {
+                      return true;
+                      // }
+                    }
+                    // if (t1 === 0 && t2 === 1) {
+                    //   return false;
+                    // }
+                    if (t1 === 1 && t2 === 0) {
+                      if (is_reverse) {
+                        return true;
+                      }
+                    }
+                    // if (t1 === 1 && t2 === 1) {
+                    // }
+                    return false;
+                  })(),
+                  // start: p1,
+                  // opt: [t1, t2],
+                  // rotate,
+                };
+                // console.log("create point", next_command, next_values, p2, circle);
+                const next_path_point = PathPoint({
+                  point: BezierPoint(p2),
+                  from: null,
+                  to: null,
+                  circle,
+                  virtual: false,
+                });
+                cur_path_point = next_path_point;
+                cur_path.appendPoint(next_path_point);
+              }
+            }
+            if (["L", "l"].includes(next_command)) {
+              let v0 = next_values[0];
+              let v1 = next_values[1];
+              let p = {
+                x: this.normalizeX(v0, xExtra),
+                y: this.normalizeY(v1, xExtra),
+              };
+              if (["l"].includes(next_command)) {
+                // p = {
+                //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
+                //   y: this.normalizeY(v1, { ...xExtra, pureValue: true }),
+                // };
+                moveTo(p);
+              } else {
+                p = this.translate(p);
+              }
+              prev_point = p;
+              // console.log("create point", next_command, next, next_values, p);
+              const next_path_point = PathPoint({
+                point: BezierPoint(p),
+                from: null,
+                to: null,
+                virtual: false,
+              });
+              cur_path_point = next_path_point;
+              cur_path.appendPoint(next_path_point);
+            }
+            if (["V", "v", "H", "h"].includes(next_command)) {
+              let distance = (() => {
+                const v = next_values[0];
+                if (next_command === "H") {
+                  return this.normalizeX(v, xExtra);
+                }
+                if (next_command === "V") {
+                  return this.normalizeY(v, yExtra);
+                }
+                if (next_command === "h") {
+                  return this.normalizeX(v, { ...xExtra, pureValue: true });
+                }
+                if (next_command === "v") {
+                  return this.normalizeY(v, { ...yExtra, pureValue: true });
+                }
+                return v;
+              })();
+              let p = {
+                x: 0,
+                y: 0,
+              };
+              if (next_command === "H") {
+                p.x = distance;
+                p.y = prev_point.y;
+                p = this.translate(p);
+              }
+              if (next_command === "V") {
+                p.x = prev_point.x;
+                p.y = distance;
+                p = this.translate(p);
+              }
+              if (next_command === "h") {
+                distance += prev_point.x;
+                p.x = distance;
+                p.y = prev_point.y;
+              }
+              if (next_command === "v") {
+                distance += prev_point.y;
+                p.x = prev_point.x;
+                p.y = distance;
+              }
+              prev_point = p;
+              // console.log("create point", next_command, next, next_values, p);
+              const next_path_point = PathPoint({
+                point: BezierPoint(p),
+                from: null,
+                to: null,
+                virtual: false,
+              });
+              cur_path_point = next_path_point;
+              cur_path.appendPoint(next_path_point);
+            }
+            if (["C", "c", "S", "s"].includes(next_command)) {
+              let v0 = next_values[0];
+              let v1 = next_values[1];
+              let v2 = next_values[2];
+              let v3 = next_values[3];
+              let v4 = next_values[4];
+              let v5 = next_values[5];
+              let a1 = {
+                x: this.normalizeX(v0, xExtra),
+                y: this.normalizeY(v1, yExtra),
+              };
+              let a2 = {
+                x: this.normalizeX(v4, xExtra),
+                y: this.normalizeY(v5, yExtra),
+              };
+              let a3 = {
+                x: this.normalizeX(v2, xExtra),
+                y: this.normalizeY(v3, yExtra),
+              };
+              if (["c", "s"].includes(next_command)) {
+                // a1 = {
+                //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
+                //   y: this.normalizeY(v1, { ...yExtra, pureValue: true }),
+                // };
+                // a2 = {
+                //   x: this.normalizeX(v4, { ...xExtra, pureValue: true }),
+                //   y: this.normalizeY(v5, { ...yExtra, pureValue: true }),
+                // };
+                // a3 = {
+                //   x: this.normalizeX(v2, { ...xExtra, pureValue: true }),
+                //   y: this.normalizeY(v3, { ...yExtra, pureValue: true }),
+                // };
+                moveTo(a1);
+                moveTo(a2);
+                moveTo(a3);
+              } else {
+                a1 = this.translate(a1);
+                a2 = this.translate(a2);
+                a3 = this.translate(a3);
+              }
+              prev_point = a2;
+              if (cur_path_point) {
+                // 这里 cur_path_point 其实是 prev_path_point ？？？
+                cur_path_point.setTo(BezierPoint(a1));
+                if (cur_path_point.from) {
+                  const collinear = isCollinear(cur_path_point.from.pos, cur_path_point.point.pos, a1);
+                  cur_path_point.setMirror(PathPointMirrorTypes.NoMirror);
+                  if (collinear.collinear) {
+                    cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngle);
+                    if (collinear.midpoint) {
+                      cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
+                    }
+                  }
+                }
+              }
+              // console.log("create point", next_command, a2);
+              const next_path_point = PathPoint({
+                point: BezierPoint(a2),
+                from: BezierPoint(a3),
+                to: null,
+                virtual: false,
+              });
+              cur_path_point = next_path_point;
+              cur_path.appendPoint(next_path_point);
+            }
+            if (["Q", "q", "T", "t"].includes(next_command)) {
+              const v0 = next_values[0];
+              const v1 = next_values[1];
+              const v4 = next_values[4];
+              const v5 = next_values[5];
+              let a1 = {
+                x: this.normalizeX(v0, xExtra),
+                y: this.normalizeY(v1, yExtra),
+              };
+              let a2 = {
+                x: this.normalizeX(v4, xExtra),
+                y: this.normalizeY(v5, yExtra),
+              };
+              if (["q", "t"].includes(next_command)) {
+                // a1 = {
+                //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
+                //   y: this.normalizeY(v1, { ...yExtra, pureValue: true }),
+                // };
+                // a2 = {
+                //   x: this.normalizeX(v4, { ...xExtra, pureValue: true }),
+                //   y: this.normalizeY(v5, { ...yExtra, pureValue: true }),
+                // };
+                moveTo(a1);
+                moveTo(a2);
+              } else {
+                a1 = this.translate(a1);
+                a2 = this.translate(a2);
+              }
+              prev_point = a2;
+              if (cur_path_point) {
+                cur_path_point.setTo(BezierPoint(a1));
+                if (cur_path_point.from) {
+                  const collinear = isCollinear(cur_path_point.from.pos, cur_path_point.point.pos, a1);
+                  cur_path_point.setMirror(PathPointMirrorTypes.NoMirror);
+                  if (collinear.collinear) {
+                    cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngle);
+                    if (collinear.midpoint) {
+                      cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
+                    }
+                  }
+                }
+              }
+              // console.log("create point", next_command, a2);
+              const next_path_point = PathPoint({
+                point: BezierPoint(a2),
+                from: null,
+                to: null,
+                virtual: false,
+              });
+              cur_path_point = next_path_point;
+              cur_path.appendPoint(next_path_point);
+            }
+          }
         }
       }
-      updatePoints();
-      bus.emit(Events.Update);
+      return {
+        paths,
+        dimensions: data.dimensions,
+      };
     },
     update() {
       bus.emit(Events.Update);
     },
     handleMouseDown(pos: { x: number; y: number }) {
       const { x, y } = pos;
+      console.log("[BIZ]canvas/index - handleMouseDown before if (_pen_editing)", _pen_editing);
       if (_pen_editing) {
         if (!inGrid(pos)) {
           return;
         }
         const found = checkIsClickPathPoint(pos);
-        console.log("has matched point", pos);
+        console.log("[BIZ]canvas/index has matched point", found, _cur_path_point, _cur_point);
         if (found && _cur_path_point && found !== _cur_path_point && _cur_path) {
           if (found.start) {
             // 点击了开始点，闭合路径
@@ -345,14 +818,17 @@ export function Canvas(props: CanvasProps) {
         _cur_path.appendPoint(end);
         return;
       }
-      _mx = x;
-      _my = y;
-      const found = checkIsClickPoint(pos);
-      if (found) {
-        _prepare_dragging = true;
-        _cur_point = found;
-        _cx = found.x;
-        _cy = found.y;
+      if (_cursor_editing) {
+        _mx = x;
+        _my = y;
+        const found = checkIsClickPoint(pos);
+        console.log("[BIZ]canvas/index - after checkIsClickPoint(pos)", found);
+        if (found) {
+          _prepare_dragging = true;
+          _cur_point = found;
+          _cx = found.x;
+          _cy = found.y;
+        }
       }
     },
     handleMouseMove(pos: { x: number; y: number }) {
@@ -475,27 +951,35 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      // if (!_prepare_dragging) {
-      //   return;
-      // }
-      if (!_cur_point) {
-        return;
+      if (_cursor_editing) {
+        if (!_prepare_dragging) {
+          return;
+        }
+        if (!_cur_point) {
+          return;
+        }
+        _ox = pos.x - _mx;
+        _oy = pos.y - _my;
+        _cur_point.move({
+          x: _cx + _ox,
+          y: _cy + _oy,
+        });
+        bus.emit(Events.Update);
       }
-      _ox = pos.x - _mx;
-      _oy = pos.y - _my;
-      _cur_point.move({
-        x: _cx + _ox,
-        y: _cy + _oy,
-      });
-      bus.emit(Events.Update);
     },
     handleMouseUp(pos: { x: number; y: number }) {
       const { x, y } = pos;
-      const path = _cur_path;
-      if (!path) {
-        return;
-      }
+      _mx = 0;
+      _my = 0;
+      _cx = 0;
+      _cy = 0;
+      _ox = 0;
+      _oy = 0;
       if (_pen_editing) {
+        const path = _cur_path;
+        if (!path) {
+          return;
+        }
         for (let i = 0; i < _events.length; i += 1) {
           _events[i]();
         }
@@ -505,12 +989,12 @@ export function Canvas(props: CanvasProps) {
           return;
         }
         if (_cur_path_point && _cur_path_point.closed) {
-          console.log("before closed path mouse up");
+          // console.log("before closed path mouse up");
           // 闭合路径松开
           const start = path.start_point;
           start.setMirror(PathPointMirrorTypes.NoMirror);
           start.setEnd(true);
-          console.log("set from for start point", _cur_path_point.from);
+          // console.log("set from for start point", _cur_path_point.from);
           if (_cur_path_point.from) {
             start.setFrom(_cur_path_point.from, { copy: true });
           }
@@ -604,13 +1088,15 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      if (!_prepare_dragging) {
-        return;
+      if (_cursor_editing) {
+        if (!_prepare_dragging) {
+          return;
+        }
+        _prepare_dragging = false;
+        _dragging = false;
+        _cur_point = null;
+        _cur_path_point = null;
       }
-      _prepare_dragging = false;
-      _dragging = false;
-      // _cur_point = null;
-      _cur_path_point = null;
     },
     get debug() {
       return _debug;
