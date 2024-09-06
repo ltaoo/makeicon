@@ -90,22 +90,21 @@ export function getVerticalPoints(a1: { x: number; y: number }, a2: { x: number;
   };
   return [line1_end_up, line1_end_down];
 }
+export const CurveLikeCircleRatio = 0.551915024494;
 /**
  * 根据给定的三个在一条直线上的点，获取以该直线为直径的，构成圆的四条贝塞尔曲线
  */
-
 export function getHalfCirclePoints(
   f1: { x: number; y: number },
   f5: { x: number; y: number },
   f3: { x: number; y: number }
 ) {
-  const c_ratio = 0.551915024494;
   // 从右往左
-  const [rb, rt] = getVerticalPoints(f1, f5, c_ratio);
+  const [rb, rt] = getVerticalPoints(f1, f5, CurveLikeCircleRatio);
   const [f2, f4] = getVerticalPoints(f5, f3, 1);
-  const [bl, br] = getVerticalPoints(f2, f5, c_ratio);
-  const [lt, lb] = getVerticalPoints(f3, f5, c_ratio);
-  const [tr, tl] = getVerticalPoints(f4, f5, c_ratio);
+  const [bl, br] = getVerticalPoints(f2, f5, CurveLikeCircleRatio);
+  const [lt, lb] = getVerticalPoints(f3, f5, CurveLikeCircleRatio);
+  const [tr, tl] = getVerticalPoints(f4, f5, CurveLikeCircleRatio);
   return [
     new Bezier([f1, rb, br, f2]),
     new Bezier([f2, bl, lb, f3]),
@@ -281,18 +280,20 @@ export function calculateCircleCenter(a1: { x: number; y: number }, a2: { x: num
     y2 = a2.y;
   const dx = x2 - x1;
   const dy = y2 - y1;
-  const d = parseFloat(Math.sqrt(dx * dx + dy * dy).toFixed(1));
-  if (d > 2 * r) {
+  const d = parseFloat(Math.sqrt(dx * dx + dy * dy).toFixed(3));
+  if (d - 2 * r >= 0.05) {
     console.log("The points are too far apart for the given radius.");
     return null;
   }
   const mx = (x1 + x2) / 2;
   const my = (y1 + y2) / 2;
-  const h = Math.sqrt(r * r - (d / 2) * (d / 2));
+  // const h = Math.sqrt(r * r - (d / 2) * (d / 2));
+  const h = Math.sqrt(Math.abs(r * r - (d / 2) * (d / 2)));
   const unitX = -dy / d;
   const unitY = dx / d;
   const center1 = { x: mx + h * unitX, y: my + h * unitY };
   const center2 = { x: mx - h * unitX, y: my - h * unitY };
+  // console.log(center2, center1);
   return [center2, center1];
 }
 

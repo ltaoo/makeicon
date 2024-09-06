@@ -8,7 +8,6 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
   // $canvas.height = height * dpr;
   store.drawLine = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
     ctx.moveTo(p1.x, p1.y);
-    ctx.beginPath();
     ctx.lineTo(p2.x, p2.y);
     ctx.closePath();
     ctx.stroke();
@@ -51,13 +50,7 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.fillText(`${point.uid}|${x - store.grid.x},${y - store.grid.y}`, x + 2, y - 2);
   };
   store.drawDiamondAtLineEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
-    // 绘制线条
-    // ctx.beginPath();
-    // ctx.moveTo(lineStartX, lineStartY);
-    // ctx.lineTo(lineEndX, lineEndY);
-    // ctx.stroke();
     const size = 3;
-
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -91,14 +84,15 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
   };
   store.drawGrid = () => {
     const { width, height } = store.size;
-    const unit = 16;
     const grid = store.grid;
+    const unit = grid.unit;
     const start = {
       x: width / 2 - grid.width / 2,
       y: height / 2 - grid.height / 2,
     };
     // console.log("draw grid", width, height, start, grid.height);
     store.setGrid(start);
+    ctx.save();
     ctx.beginPath();
     ctx.lineWidth = grid.lineWidth;
     // console.log(`ctx.moveTo(${start.x}, ${start.y});`);
@@ -122,6 +116,7 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.closePath();
     ctx.strokeStyle = grid.color;
     ctx.stroke();
+    ctx.restore();
   };
   store.clear = () => {
     const { width, height } = $canvas;
@@ -129,10 +124,10 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.clearRect(0, 0, width, height);
   };
   const { innerWidth, innerHeight } = window;
-  // const width = innerWidth;
-  // const height = innerHeight;
-  const width = innerWidth * dpr;
-  const height = innerHeight * dpr;
+  const width = innerWidth;
+  const height = innerHeight;
+  // const width = innerWidth * dpr;
+  // const height = innerHeight * dpr;
   store.setSize({
     width,
     height,
@@ -140,8 +135,8 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
   store.setDPR(dpr);
   $canvas.width = width;
   $canvas.height = height;
-  $canvas.style.width = `${innerWidth}px`;
-  $canvas.style.height = `${innerHeight}px`;
+  // $canvas.style.width = `${innerWidth}px`;
+  // $canvas.style.height = `${innerHeight}px`;
   // ctx.scale(dpr, dpr);
   $canvas.addEventListener("mousedown", (evt) => {
     store.handleMouseDown({

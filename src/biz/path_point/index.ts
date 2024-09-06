@@ -25,11 +25,10 @@ export type CircleCurved = {
   // start: { x: number; y: number };
   center: { x: number; y: number };
   radius: number;
-  // rotate: number;
   arc: { start: number; end: number };
   /** 是否逆时针 */
   counterclockwise: boolean;
-  // opt: number[];
+  extra: { start: { x: number; y: number }; rx: number; ry: number; rotate: number; t1: number; t2: number };
 };
 type PathPointProps = {
   point: BezierPoint;

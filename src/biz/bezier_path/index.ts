@@ -15,9 +15,13 @@ import {
   calculateCircleCenter,
   calculateCircleArcs,
 } from "@/biz/path_point/utils";
-import { SVGParser } from "@/biz/svg/parser";
 
-export type LineCapType = "round" | "none" | "rect";
+// https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/stroke-linecap
+export type LineCapType = "butt" | "round" | "square";
+// export type LineJoinType = "miter" | "round" | "bevel" | "miter-clip" | "arcs";
+// https://developer.mozilla.org/zh-CN/docs/Web/API/CanvasRenderingContext2D/lineJoin
+export type LineJoinType = "round" | "bevel" | "miter";
+// 只能通过 outline 模拟描边+join样式，才能支持更强的 join 效果
 
 enum Events {
   Move,
@@ -32,6 +36,8 @@ type BezierPathProps = {
   stroke?: null | {
     color: string;
     width: number;
+    cap?: string;
+    join?: string;
   };
   closed?: boolean;
 };
@@ -59,14 +65,22 @@ export function BezierPath(props: BezierPathProps) {
   let _bezier_points = mapToBezierPoints(_path_points);
   let _stroke = {
     enabled: !!stroke,
-    width: 0,
+    width: 1,
+    color: "#111111",
     start_cap: "round" as LineCapType,
     end_cap: "round" as LineCapType,
-    color: "#111111",
+    join: "miter" as LineJoinType,
   };
   if (stroke) {
     _stroke.color = stroke.color;
     _stroke.width = stroke.width;
+    if (stroke.cap) {
+      _stroke.start_cap = stroke.cap as LineCapType;
+      _stroke.end_cap = stroke.cap as LineCapType;
+    }
+    if (stroke.join) {
+      _stroke.join = stroke.join as LineJoinType;
+    }
   }
   let _fill = {
     enabled: !!fill,
@@ -437,7 +451,7 @@ export function BezierPath(props: BezierPathProps) {
           outline.push(tl2);
           outline.push(tr2);
         }
-        if (cap === "none") {
+        if (cap === "butt") {
           outline.push(start_cap);
         }
       }
@@ -449,7 +463,7 @@ export function BezierPath(props: BezierPathProps) {
           outline.push(tl1);
           outline.push(tr1);
         }
-        if (cap === "none") {
+        if (cap === "butt") {
           outline.push(end_cap);
         }
       }
@@ -476,7 +490,9 @@ export function BezierPath(props: BezierPathProps) {
       const commands: {
         c: string;
         a: number[];
-        e: null | { x: number; y: number };
+        a2?: number[];
+        end: null | { x: number; y: number };
+        start: null | { x: number; y: number };
       }[] = [];
       // console.log("[BIZ]bezier_path/index - getCommands", _path_points, _bezier_points.length);
       let is_closed: null | PathPoint = null;
@@ -491,7 +507,8 @@ export function BezierPath(props: BezierPathProps) {
           commands.push({
             c: "M",
             a: [cur.x, cur.y],
-            e: prev ? prev.point.pos : null,
+            end: prev ? prev.point.pos : null,
+            start: null,
           });
         }
         (() => {
@@ -503,16 +520,18 @@ export function BezierPath(props: BezierPathProps) {
             commands.push({
               c: "C",
               a: [prev.to.x, prev.to.y, cur.from.x, cur.from.y, cur.x, cur.y],
-              e: prev ? prev.point.pos : null,
+              end: prev ? prev.point.pos : null,
+              start: next && !next.from ? cur.point.pos : null,
             });
             return;
           }
           if (cur.circle) {
-            // console.log("after cur.circle", prev?.point.pos);
-            const { counterclockwise } = cur.circle;
-            const { start, end } = cur.circle.arc;
+            // 说明是一条弧线
+            console.log("[BIZ]bezier_path - index - after if (cur.circle", cur.circle.center, cur.circle.arc);
+            const { counterclockwise, extra } = cur.circle;
             commands.push({
               c: "A",
+              // 这个是给 canvas 绘制
               a: [
                 cur.circle.center.x,
                 cur.circle.center.y,
@@ -521,8 +540,20 @@ export function BezierPath(props: BezierPathProps) {
                 counterclockwise ? cur.circle.arc.start : cur.circle.arc.end,
                 Number(counterclockwise),
               ],
-              // 开始两条弧线，如果不判断 !prev.start，在第一条弧线的起点终点就会多出一条直线
-              e: prev && !prev.start ? { ...prev.point.pos } : null,
+              // 这个是给 SVG 绘制
+              a2: [
+                // extra.start.x,
+                // extra.start.y,
+                extra.rx,
+                extra.ry,
+                extra.rotate,
+                extra.t1,
+                extra.t2,
+                cur.point.pos.x,
+                cur.point.pos.y,
+              ],
+              end: next && next.from ? cur.point.pos : null,
+              start: extra.start,
             });
             return;
           }
@@ -531,30 +562,35 @@ export function BezierPath(props: BezierPathProps) {
             commands.push({
               c: "L",
               a: [cur.x, cur.y],
-              e: prev ? prev.point.pos : null,
+              end: prev ? prev.point.pos : null,
+              start: null,
             });
             return;
           }
         })();
         if (!next && is_closed) {
-          if (cur.to && is_closed.from) {
-            commands.push({
-              c: "C",
-              a: [cur.to.x, cur.to.y, is_closed.from.x, is_closed.from.y, is_closed.point.x, is_closed.point.y],
-              e: prev ? prev.point.pos : null,
-            });
-          }
-          if (!cur.to && !is_closed.from) {
-            commands.push({
-              c: "L",
-              a: [is_closed.point.x, is_closed.point.y],
-              e: prev ? prev.point.pos : null,
-            });
-          }
+          // if (cur.to && is_closed.from) {
+          //   // 这个是为什么？
+          //   commands.push({
+          //     c: "C",
+          //     a: [cur.to.x, cur.to.y, is_closed.from.x, is_closed.from.y, is_closed.point.x, is_closed.point.y],
+          //     end: prev ? prev.point.pos : null,
+          //     start: null,
+          //   });
+          // }
+          // if (!cur.to && !is_closed.from) {
+          //   commands.push({
+          //     c: "L",
+          //     a: [is_closed.point.x, is_closed.point.y],
+          //     end: prev ? prev.point.pos : null,
+          //     start: null,
+          //   });
+          // }
           commands.push({
             c: "Z",
             a: [],
-            e: prev ? prev.point.pos : null,
+            end: prev ? prev.point.pos : null,
+            start: null,
           });
         }
       }

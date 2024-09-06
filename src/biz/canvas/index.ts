@@ -10,7 +10,7 @@ import {
 } from "@/biz/path_point/utils";
 import { BezierPath } from "@/biz/bezier_path";
 import { BezierPoint } from "@/biz/bezier_point";
-import { SVGParser } from "@/biz/svg/parser";
+import { PathParser } from "@/biz/svg/path-parser";
 
 const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
 
@@ -47,6 +47,7 @@ export function Canvas(props: CanvasProps) {
     y: 0,
     width: 512,
     height: 512,
+    unit: 16,
     lineWidth: 0.5,
     color: "#cccccc",
     // width: 600,
@@ -72,7 +73,7 @@ export function Canvas(props: CanvasProps) {
   /** 当前是否激活钢笔工具 */
   let _pen_editing = 0;
   /** 当前是否激活选择工具 */
-  let _cursor_editing = 0;
+  let _cursor_editing = 1;
   let _events: (() => void)[] = [];
   let _debug = false;
 
@@ -206,6 +207,12 @@ export function Canvas(props: CanvasProps) {
       // return v;
     },
     translate(pos: { x: number; y: number }) {
+      if (_pen_editing) {
+        return {
+          x: pos.x,
+          y: pos.y,
+        };
+      }
       return {
         x: this.translateX(pos.x),
         y: this.translateY(pos.y),
@@ -214,6 +221,14 @@ export function Canvas(props: CanvasProps) {
     transformPos(pos: { x: number; y: number }, extra: Partial<{ scale: number; precision: number }> = {}) {
       const x = this.normalizeX(pos.x, extra);
       const y = this.normalizeY(pos.y, extra);
+      return [x, y];
+    },
+    transformPos2(pos: { x: number; y: number }, extra: Partial<{ scale: number; precision: number }> = {}) {
+      const { precision = 2 } = extra;
+      // const x = this.normalizeX(pos.x, extra);
+      // const y = this.normalizeY(pos.y, extra);
+      const x = parseFloat((pos.x - _grid.x).toFixed(precision));
+      const y = parseFloat((pos.y - _grid.y).toFixed(precision));
       return [x, y];
     },
     deleteCurPoint() {
@@ -232,6 +247,7 @@ export function Canvas(props: CanvasProps) {
     cancelPen() {},
     selectPen() {
       _pen_editing = 1;
+      _cursor_editing = 1;
       bus.emit(Events.Change, { ..._state });
     },
     cancelCursor() {
@@ -240,14 +256,12 @@ export function Canvas(props: CanvasProps) {
       bus.emit(Events.Change, { ..._state });
     },
     selectCursor() {
-      _cursor_editing = 1;
+      // _cursor_editing = 1;
       if (_pen_editing) {
         const path = _cur_path;
-        if (!path) {
-          return;
+        if (path) {
+          path.removeLastPoint();
         }
-        path.removeLastPoint();
-        return;
       }
       _pen_editing = 0;
       _cur_path_point = null;
@@ -296,27 +310,40 @@ export function Canvas(props: CanvasProps) {
         // d += "Z";
         const commands = path.buildCommands();
         for (let i = 0; i < commands.length; i += 1) {
-          const { c, a } = commands[i];
+          const { c, a, a2 } = commands[i];
           if (i === 0) {
-            d += `M${this.transformPos({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
+            d += `M${this.transformPos2({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
           }
           (() => {
             if (c === "L") {
-              d += `L${this.transformPos({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
+              d += `L${this.transformPos2({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
+              return;
+            }
+            if (c === "A" && a2) {
+              const end = [a2[5], a2[6]];
+              const rrr = [
+                a2[0],
+                a2[1],
+                a2[2],
+                a2[3],
+                a2[4],
+                ...this.transformPos2({ x: end[0], y: end[1] }, { scale }),
+              ].join(" ");
+              d += `A${rrr}`;
               return;
             }
             if (c === "C") {
               d += `C${[
-                ...this.transformPos({ x: a[0], y: a[1] }, { scale }),
-                ...this.transformPos({ x: a[2], y: a[3] }, { scale }),
-                ...this.transformPos({ x: a[4], y: a[5] }, { scale }),
+                ...this.transformPos2({ x: a[0], y: a[1] }, { scale }),
+                ...this.transformPos2({ x: a[2], y: a[3] }, { scale }),
+                ...this.transformPos2({ x: a[4], y: a[5] }, { scale }),
               ].join(" ")}`;
               return;
             }
             if (c === "Q") {
               d += `Q${[
-                ...this.transformPos({ x: a[0], y: a[1] }, { scale }),
-                ...this.transformPos({ x: a[2], y: a[3] }, { scale }),
+                ...this.transformPos2({ x: a[0], y: a[1] }, { scale }),
+                ...this.transformPos2({ x: a[2], y: a[3] }, { scale }),
               ].join(" ")}`;
             }
           })();
@@ -331,7 +358,7 @@ export function Canvas(props: CanvasProps) {
     exportWeappCode() {
       const svg = this.exportSVG();
       const url = toBase64(svg, { doubleQuote: true });
-      const template = `.icon-example {\n-webkit-mask:url('${url}') no-repeat 50% 50%;\n-webkit-mask-size:cover;\n}`;
+      const template = `.icon-example {\n-webkit-mask:url('${url}') no-repeat 50% 50%;\n-webkit-mask-size: cover;\n}`;
       return template;
     },
     getMousePoint() {
@@ -390,7 +417,10 @@ export function Canvas(props: CanvasProps) {
       bus.emit(Events.Update);
     },
     buildBezierPathsFromPathString(svg: string) {
-      const data = SVGParser.parse_svg(svg);
+      if (!svg.startsWith("<svg")) {
+        return null;
+      }
+      const data = PathParser.parse_svg(svg);
       const paths = [];
       const { dimensions } = data;
       const xExtra = {
@@ -403,19 +433,20 @@ export function Canvas(props: CanvasProps) {
       };
       // console.log("extra", xExtra.scale, yExtra.scale, dimensions, _grid.width, _grid.height);
       for (let j = 0; j < data.paths.length; j += 1) {
-        const pathPayload = data.paths[j];
-        const content = pathPayload.d;
-        const tokens = SVGParser.parse_path(content);
+        const payload = data.paths[j];
+        const content = payload.d;
+        const tokens = PathParser.parse(content);
         let cur_path: BezierPath | null = null;
         let cur_path_point: PathPoint | null = null;
         let prev_path_point: PathPoint | null = null;
         let prev_point = { x: 0, y: 0 };
         let start_path_point: PathPoint | null = null;
+        let prev_start = { x: 0, y: 0 };
         function moveTo(p: { x: number; y: number }, extra: Partial<{ is_relative: boolean }> = {}) {
           p.x += prev_point.x;
           p.y += prev_point.y;
         }
-        console.log("tokens", tokens);
+        console.log("tokens", tokens, payload);
         for (let i = 0; i < tokens.length; i += 1) {
           const prev = tokens[i - 1];
           const cur = tokens[i];
@@ -431,12 +462,15 @@ export function Canvas(props: CanvasProps) {
               y: this.normalizeX(v1, yExtra),
             };
             if (command === "m") {
-              moveTo(p);
+              // moveTo(p);
+              p.x += prev_start.x;
+              p.y += prev_start.y;
             } else {
               p = this.translate(p);
             }
+            Object.assign(prev_start, p);
+            console.log("[BIZ]before new start point", v0, v1, prev_point);
             prev_point = p;
-            // console.log("create a start point", command, p);
             const point = PathPoint({
               point: BezierPoint(p),
               from: null,
@@ -448,15 +482,17 @@ export function Canvas(props: CanvasProps) {
             cur_path_point = point;
             const new_path = BezierPath({
               points: [point],
-              fill: pathPayload.fill
+              fill: payload.fill
                 ? {
-                    color: pathPayload.fill,
+                    color: payload.fill,
                   }
                 : null,
-              stroke: pathPayload.stroke
+              stroke: payload.stroke
                 ? {
-                    color: pathPayload.stroke,
-                    width: pathPayload.strokeWidth || 1,
+                    color: payload.stroke,
+                    width: payload.strokeWidth || 1,
+                    cap: payload.lineCap,
+                    join: payload.lineJoin,
                   }
                 : null,
             });
@@ -494,6 +530,7 @@ export function Canvas(props: CanvasProps) {
               }
               prev_point = p2;
               const is_reverse = p1.x > p2.x;
+              console.log("[BIZ]canvas/index - before calculateCircleCenter", p1, p2, radius);
               const centers = calculateCircleCenter(p1, p2, radius);
               if (centers) {
                 const [index1, index2] = (() => {
@@ -512,9 +549,9 @@ export function Canvas(props: CanvasProps) {
                   return [0, 1];
                 })();
                 const center = centers[index1];
-                // console.log("centers", centers, center, index1);
                 const arcs = calculateCircleArcs(center, p1, p2);
                 const arc = arcs[index2];
+                // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
                 const circle: CircleCurved = {
                   center,
                   radius,
@@ -537,9 +574,7 @@ export function Canvas(props: CanvasProps) {
                     // }
                     return false;
                   })(),
-                  // start: p1,
-                  // opt: [t1, t2],
-                  // rotate,
+                  extra: { start: p1, rx, ry, rotate, t1, t2 },
                 };
                 // console.log("create point", next_command, next_values, p2, circle);
                 const next_path_point = PathPoint({
@@ -846,17 +881,15 @@ export function Canvas(props: CanvasProps) {
         _cur_path.appendPoint(end);
         return;
       }
-      if (_cursor_editing) {
-        _mx = x;
-        _my = y;
-        const found = checkIsClickPoint(pos);
-        console.log("[BIZ]canvas/index - after checkIsClickPoint(pos)", found);
-        if (found) {
-          _prepare_dragging = true;
-          _cur_point = found;
-          _cx = found.x;
-          _cy = found.y;
-        }
+      _mx = x;
+      _my = y;
+      const found = checkIsClickPoint(pos);
+      console.log("[BIZ]canvas/index - after checkIsClickPoint(pos)", found);
+      if (found) {
+        _prepare_dragging = true;
+        _cur_point = found;
+        _cx = found.x;
+        _cy = found.y;
       }
     },
     handleMouseMove(pos: { x: number; y: number }) {
@@ -979,21 +1012,19 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      if (_cursor_editing) {
-        if (!_prepare_dragging) {
-          return;
-        }
-        if (!_cur_point) {
-          return;
-        }
-        _ox = pos.x - _mx;
-        _oy = pos.y - _my;
-        _cur_point.move({
-          x: _cx + _ox,
-          y: _cy + _oy,
-        });
-        bus.emit(Events.Update);
+      if (!_prepare_dragging) {
+        return;
       }
+      if (!_cur_point) {
+        return;
+      }
+      _ox = pos.x - _mx;
+      _oy = pos.y - _my;
+      _cur_point.move({
+        x: _cx + _ox,
+        y: _cy + _oy,
+      });
+      bus.emit(Events.Update);
     },
     handleMouseUp(pos: { x: number; y: number }) {
       const { x, y } = pos;
@@ -1032,7 +1063,7 @@ export function Canvas(props: CanvasProps) {
           _moving_for_new_line = false;
           _cur_point = null;
           _cur_path_point = null;
-          _pen_editing = 0;
+          // _pen_editing = 0;
           // if (_dragging) {
           // }
           bus.emit(Events.Update);
@@ -1116,15 +1147,13 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      if (_cursor_editing) {
-        if (!_prepare_dragging) {
-          return;
-        }
-        _prepare_dragging = false;
-        _dragging = false;
-        _cur_point = null;
-        _cur_path_point = null;
+      if (!_prepare_dragging) {
+        return;
       }
+      _prepare_dragging = false;
+      _dragging = false;
+      _cur_point = null;
+      _cur_path_point = null;
     },
     get debug() {
       return _debug;
