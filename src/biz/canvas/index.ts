@@ -8,6 +8,7 @@ import {
   calculateCircleArcs,
   findSymmetricPoint,
   distanceOfPoints,
+  arc_to_curve,
 } from "@/biz/path_point/utils";
 import { BezierPath } from "@/biz/bezier_path";
 import { BezierPoint } from "@/biz/bezier_point";
@@ -585,77 +586,111 @@ export function Canvas(props: CanvasProps) {
               let p2 = { x: this.normalizeX(x, xExtra), y: this.normalizeY(y, yExtra) };
               let radius = this.normalizeX(rx, xExtra);
               if (next_command === "a") {
-                // p2 = {
-                //   x: this.normalizeX(x, { ...xExtra, pureValue: true }),
-                //   y: this.normalizeY(y, { ...yExtra, pureValue: true }),
-                // };
                 moveTo(p2);
               } else {
                 p2 = this.translate(p2);
               }
               prev_point = p2;
-              const is_reverse = p1.x > p2.x;
-              const distance = distanceOfPoints(p1, p2);
-              if (radius < distance / 2) {
-                radius = distance / 2;
-              }
-              // console.log("[BIZ]canvas/index - before calculateCircleCenter", p1, p2, radius);
-              const centers = calculateCircleCenter(p1, p2, radius);
-              if (centers) {
-                const [index1, index2] = (() => {
-                  if (t1 === 0 && t2 === 0) {
-                    return [0, 1];
-                  }
-                  if (t1 === 0 && t2 === 1) {
-                    return [1, 0];
-                  }
-                  if (t1 === 1 && t2 === 0) {
-                    return [1, 1];
-                  }
-                  if (t1 === 1 && t2 === 1) {
-                    return [0, 0];
-                  }
-                  return [0, 1];
-                })();
-                const center = centers[index1];
-                const arcs = calculateCircleArcs(center, p1, p2);
-                const arc = arcs[index2];
-                // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
-                const circle: CircleCurved = {
-                  center,
-                  radius,
-                  arc,
-                  counterclockwise: (() => {
-                    if (t1 === 0 && t2 === 0) {
-                      // if (is_reverse) {
-                      return true;
-                      // }
-                    }
-                    // if (t1 === 0 && t2 === 1) {
-                    //   return false;
-                    // }
-                    if (t1 === 1 && t2 === 0) {
-                      if (is_reverse) {
-                        return true;
-                      }
-                    }
-                    // if (t1 === 1 && t2 === 1) {
-                    // }
-                    return false;
-                  })(),
-                  extra: { start: p1, rx, ry, rotate, t1, t2 },
-                };
-                // console.log("create point", next_command, next_values, p2, circle);
-                const next_path_point = PathPoint({
-                  point: BezierPoint(p2),
-                  from: null,
-                  to: null,
-                  circle,
+              const start = p1;
+              const arc = {
+                rx: radius,
+                ry: radius,
+                rotate,
+                t1,
+                t2,
+                end: p2,
+              };
+              console.log("[BIZ]canvas / before arc_to_curve", start, arc);
+              const pointsArr = arc_to_curve(start, arc);
+              // console.log("after arc_to_curve", start, pointsArr);
+              let inner_cur_path_point: PathPoint | null = null;
+              for (let k = 0; k < pointsArr.length; k += 1) {
+                const inner_cur = pointsArr[k];
+                console.log("inner_cur", inner_cur);
+                const inner_next = pointsArr[k + 1];
+                if (cur_path_point) {
+                  cur_path_point.setTo(BezierPoint(inner_cur[1]));
+                  // if (cur_path_point.start) {
+                  // }
+                  // if (cur_path_point.from) {
+                  //   cur_path_point.setTo(BezierPoint(inner_cur[1]));
+                  // }
+                }
+                if (inner_cur_path_point && inner_cur_path_point.from) {
+                  inner_cur_path_point.setTo(BezierPoint(inner_cur[1]));
+                }
+                const new_cur_path_point = PathPoint({
+                  point: BezierPoint(inner_cur[3]),
+                  from: BezierPoint(inner_cur[2]),
+                  to: inner_next ? BezierPoint(inner_next[1]) : null,
                   virtual: false,
                 });
-                cur_path_point = next_path_point;
-                cur_path.appendPoint(next_path_point);
+                cur_path_point = new_cur_path_point;
+                inner_cur_path_point = new_cur_path_point;
+                cur_path.appendPoint(new_cur_path_point);
               }
+
+              // const is_reverse = p1.x > p2.x;
+              // const distance = distanceOfPoints(p1, p2);
+              // if (radius < distance / 2) {
+              //   radius = distance / 2;
+              // }
+              // const centers = calculateCircleCenter(p1, p2, radius);
+              // if (centers) {
+              //   const [index1, index2] = (() => {
+              //     if (t1 === 0 && t2 === 0) {
+              //       return [0, 1];
+              //     }
+              //     if (t1 === 0 && t2 === 1) {
+              //       return [1, 0];
+              //     }
+              //     if (t1 === 1 && t2 === 0) {
+              //       return [1, 1];
+              //     }
+              //     if (t1 === 1 && t2 === 1) {
+              //       return [0, 0];
+              //     }
+              //     return [0, 1];
+              //   })();
+              //   const center = centers[index1];
+              //   const arcs = calculateCircleArcs(center, p1, p2);
+              //   const arc = arcs[index2];
+              //   // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
+              //   const circle: CircleCurved = {
+              //     center,
+              //     radius,
+              //     arc,
+              //     counterclockwise: (() => {
+              //       if (t1 === 0 && t2 === 0) {
+              //         // if (is_reverse) {
+              //         return true;
+              //         // }
+              //       }
+              //       // if (t1 === 0 && t2 === 1) {
+              //       //   return false;
+              //       // }
+              //       if (t1 === 1 && t2 === 0) {
+              //         if (is_reverse) {
+              //           return true;
+              //         }
+              //       }
+              //       // if (t1 === 1 && t2 === 1) {
+              //       // }
+              //       return false;
+              //     })(),
+              //     extra: { start: p1, rx, ry, rotate, t1, t2 },
+              //   };
+              //   // console.log("create point", next_command, next_values, p2, circle);
+              //   const next_path_point = PathPoint({
+              //     point: BezierPoint(p2),
+              //     from: null,
+              //     to: null,
+              //     circle,
+              //     virtual: false,
+              //   });
+              //   cur_path_point = next_path_point;
+              //   cur_path.appendPoint(next_path_point);
+              // }
             }
             if (["L", "l"].includes(next_command)) {
               let v0 = next_values[0];

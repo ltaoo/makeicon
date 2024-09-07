@@ -9,6 +9,18 @@ export function findSymmetricPoint(point2: { x: number; y: number }, point: { x:
   };
   return symmetricPoint;
 }
+function findSymmetricPoint2(a1: { x: number; y: number }, a2: { x: number; y: number }) {
+  const mx = (a1.x + a2.x) / 2;
+  const my = (a1.y + a2.y) / 2;
+  const dx = a2.x - a1.x;
+  const dy = a2.y - a1.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const a3 = {
+    x: a2.x + dx,
+    y: a2.y + dy,
+  };
+  return a3;
+}
 
 export function getSymmetricPoint2(
   a1: { x: number; y: number },
@@ -105,6 +117,35 @@ export function buildFourCurveOfCircle(
   const [bl, br] = getVerticalPoints(f2, f5, CurveLikeCircleRatio);
   const [lt, lb] = getVerticalPoints(f3, f5, CurveLikeCircleRatio);
   const [tr, tl] = getVerticalPoints(f4, f5, CurveLikeCircleRatio);
+  return [
+    new Bezier([f1, rb, br, f2]),
+    new Bezier([f2, bl, lb, f3]),
+    new Bezier([f3, lt, tl, f4]),
+    new Bezier([f4, tr, rt, f1]),
+  ];
+}
+function buildFourCurveOfCircle2(
+  f1: { x: number; y: number },
+  f5: { x: number; y: number },
+  f3: { x: number; y: number },
+  no_reverse: boolean
+) {
+  const c_ratio = 0.551915024494;
+  const [f2, f4] = getVerticalPoints(f5, f3, 1);
+  const [rb, rt] = getVerticalPoints(f1, f5, c_ratio);
+  const [bl, br] = getVerticalPoints(f2, f5, c_ratio);
+  const [lt, lb] = getVerticalPoints(f3, f5, c_ratio);
+  const [tr, tl] = getVerticalPoints(f4, f5, c_ratio);
+  if (no_reverse) {
+    // 顺时针
+    return [
+      new Bezier([f1, rt, tr, f4]),
+      new Bezier([f4, tl, lt, f3]),
+      new Bezier([f3, lb, bl, f2]),
+      new Bezier([f2, br, rb, f1]),
+    ];
+  }
+  // 逆时针
   return [
     new Bezier([f1, rb, br, f2]),
     new Bezier([f2, bl, lb, f3]),
@@ -316,7 +357,112 @@ export function distanceOfPoints(a1: { x: number; y: number }, a2: { x: number; 
   return r;
 }
 
-export function arcToCanvasArc(
+function calculateCircleArcs2(
+  center: { x: number; y: number },
+  pointA: { x: number; y: number },
+  pointB: { x: number; y: number }
+) {
+  const centerX = center.x;
+  const centerY = center.y;
+  const angleA = Math.atan2(pointA.y - centerY, pointA.x - centerX);
+  const angleB = Math.atan2(pointB.y - centerY, pointB.x - centerX);
+  return {
+    start: angleA,
+    end: angleB,
+  };
+}
+
+// export function arcToCanvasArc(
+//   p1: { x: number; y: number },
+//   arc: {
+//     rx: number;
+//     ry: number;
+//     rotate: number;
+//     t1: number;
+//     t2: number;
+//     end: { x: number; y: number };
+//   }
+// ) {
+//   const { rx, ry, rotate, end, t1, t2 } = arc;
+//   let radius = rx;
+//   const p2 = end;
+//   const is_reverse = p1.x > p2.x;
+//   const distance = distanceOfPoints(p1, p2);
+//   if (radius < distance / 2) {
+//     radius = distance / 2;
+//   }
+//   // console.log("[BIZ]canvas/index - before calculateCircleCenter", p1, p2, radius);
+//   const centers = calculateCircleCenter(p1, p2, radius);
+//   if (centers) {
+//     const [index1, index2] = (() => {
+//       if (t1 === 0 && t2 === 0) {
+//         return [0, 1];
+//       }
+//       if (t1 === 0 && t2 === 1) {
+//         return [1, 0];
+//       }
+//       if (t1 === 1 && t2 === 0) {
+//         return [1, 1];
+//       }
+//       if (t1 === 1 && t2 === 1) {
+//         return [0, 0];
+//       }
+//       return [0, 1];
+//     })();
+//     const center = centers[index1];
+//     const arcs = calculateCircleArcs2(center, p1, p2);
+//     const arc = arcs[index2];
+//     // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
+//     const circle: CircleCurved = {
+//       center,
+//       radius,
+//       arc,
+//       counterclockwise: (() => {
+//         if (t1 === 0 && t2 === 0) {
+//           return true;
+//         }
+//         if (t1 === 1 && t2 === 0) {
+//           if (is_reverse) {
+//             return true;
+//           }
+//         }
+//         return false;
+//       })(),
+//       extra: { start: p1, rx, ry, rotate, t1, t2 },
+//     };
+//     return circle;
+//   }
+// }
+
+function findPointAtCurve(
+  target: { x: number; y: number },
+  curve: Bezier
+): null | { t: number; index: number; x: number; y: number } {
+  const [p1, c1, c2, p2] = curve.points;
+  // console.log(p1, p2);
+  if (distanceOfPoints(target, p1) < 1) {
+    // @ts-ignore
+    return { t: 0, index: curve.__index, ...p1 };
+  }
+  if (distanceOfPoints(target, p2) < 1) {
+    // @ts-ignore
+    return { t: 1, index: curve.__index, ...p2 };
+  }
+  const lut = curve.getLUT(100);
+  const matched = (() => {
+    for (let i = 1; i < lut.length; i += 1) {
+      const point = lut[i];
+      const r = distanceOfPoints(target, point);
+      if (r < 1) {
+        // @ts-ignore
+        return { ...point, index: curve.__index };
+      }
+    }
+  })();
+  return matched || null;
+}
+
+function arcToCanvasArc(
   p1: { x: number; y: number },
   arc: {
     rx: number;
@@ -337,43 +483,164 @@ export function arcToCanvasArc(
   }
   // console.log("[BIZ]canvas/index - before calculateCircleCenter", p1, p2, radius);
   const centers = calculateCircleCenter(p1, p2, radius);
-  if (centers) {
-    const [index1, index2] = (() => {
-      if (t1 === 0 && t2 === 0) {
-        return [0, 1];
-      }
-      if (t1 === 0 && t2 === 1) {
-        return [1, 0];
-      }
-      if (t1 === 1 && t2 === 0) {
-        return [1, 1];
-      }
-      if (t1 === 1 && t2 === 1) {
-        return [0, 0];
-      }
-      return [0, 1];
-    })();
-    const center = centers[index1];
-    const arcs = calculateCircleArcs(center, p1, p2);
-    const arc = arcs[index2];
-    // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
-    const circle: CircleCurved = {
-      center,
-      radius,
-      arc,
-      counterclockwise: (() => {
-        if (t1 === 0 && t2 === 0) {
-          return true;
-        }
-        if (t1 === 1 && t2 === 0) {
-          if (is_reverse) {
-            return true;
-          }
-        }
-        return false;
-      })(),
-      extra: { start: p1, rx, ry, rotate, t1, t2 },
-    };
-    return circle;
+  if (!centers) {
+    // 这里不会出现
+    return null;
   }
+  const [index1, index2] = (() => {
+    if (t1 === 0 && t2 === 0) {
+      return [0, 0];
+    }
+    if (t1 === 0 && t2 === 1) {
+      return [1, 0];
+    }
+    if (t1 === 1 && t2 === 0) {
+      return [1, 1];
+    }
+    if (t1 === 1 && t2 === 1) {
+      return [0, 0];
+    }
+    return [0, 0];
+  })();
+  const center = centers[index1];
+  const { start: startAngle, end: endAngle } = calculateCircleArcs2(center, p1, p2);
+  const angle = (() => {
+    if (t1 === 0 && t2 === 0) {
+      return { start: startAngle, end: endAngle, sweep: 0 };
+    }
+    if (t1 === 0 && t2 === 1) {
+      if (endAngle < 0) {
+        return { start: startAngle, end: (360 * Math.PI) / 180 + endAngle, sweep: 1 };
+      }
+      return { start: startAngle, end: endAngle, sweep: 1 };
+    }
+    if (t1 === 1 && t2 === 0) {
+      return { start: (360 * Math.PI) / 180 + startAngle, end: endAngle, sweep: 0 };
+    }
+    if (t1 === 1 && t2 === 1) {
+      if (startAngle > 0) {
+        return { start: -((360 * Math.PI) / 180) + startAngle, end: endAngle, sweep: 1 };
+      }
+      if (endAngle < 0) {
+        return { start: startAngle, end: (360 * Math.PI) / 180 + endAngle, sweep: 1 };
+      }
+      return { start: startAngle, end: endAngle, sweep: 1 };
+    }
+    return { start: startAngle, end: endAngle };
+  })();
+  const circle = {
+    center,
+    radius,
+    angle1: angle.start,
+    angle2: angle.end,
+    counterclockwise: angle.sweep === 0,
+    extra: { start: p1, rx, ry, rotate, t1, t2 },
+    values: [center.x, center.y, radius, angle.start, angle.end, angle.sweep === 0],
+  };
+  return circle;
+}
+
+export function arc_to_curve(
+  start: { x: number; y: number },
+  arc: { rx: number; ry: number; rotate: number; t1: number; t2: number; end: { x: number; y: number } }
+) {
+  // console.log("[UTILS]arc_to_curve", start, arc);
+  const arcForCanvas = arcToCanvasArc(start, arc);
+  if (!arcForCanvas) {
+    return [];
+  }
+
+  const end = findSymmetricPoint2(start, arcForCanvas.center);
+
+  // console.log(start, arcForCanvas.center, end);
+
+  const curves = buildFourCurveOfCircle2(start, arcForCanvas.center, end, arc.t2 === 1);
+
+  // @ts-ignore
+  curves[0].__index = 0;
+  // @ts-ignore
+  curves[1].__index = 1;
+  // @ts-ignore
+  curves[2].__index = 2;
+  // @ts-ignore
+  curves[3].__index = 3;
+  // code1.drawCurve(curves[0]);
+  // code1.setColor("red");
+  // code1.drawCurve(curves[1]);
+  // code1.setColor("yellow");
+  // code1.drawCurve(curves[2]);
+  // code1.setColor("green");
+  // code1.drawCurve(curves[3]);
+  // code1.drawPoints([arcForCanvas.center]);
+  const rightAngle = (90 * Math.PI) / 180;
+  const matched_curves = curves.filter((curve, i) => {
+    const range = (() => {
+      if (arcForCanvas.counterclockwise) {
+        return [arcForCanvas.angle1 - i * rightAngle, arcForCanvas.angle1 - (i + 1) * rightAngle];
+      }
+      return [arcForCanvas.angle1 + i * rightAngle, arcForCanvas.angle1 + (i + 1) * rightAngle];
+    })();
+    if (
+      (arcForCanvas.angle1 >= range[0] && arcForCanvas.angle1 < range[1]) ||
+      (arcForCanvas.angle2 >= range[0] && arcForCanvas.angle2 < range[1])
+    ) {
+      return true;
+    }
+    if (arcForCanvas.counterclockwise) {
+      if (
+        (arcForCanvas.angle1 <= range[0] && arcForCanvas.angle1 > range[1]) ||
+        (arcForCanvas.angle2 <= range[0] && arcForCanvas.angle2 > range[1])
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
+  console.log("matched curves", matched_curves, arcForCanvas.counterclockwise);
+  if (matched_curves.length === 1) {
+    const bezier = matched_curves[0];
+    const t = findPointAtCurve(arc.end, bezier);
+    if (t) {
+      const points = bezier.split(0, t.t).points;
+      return [points];
+    }
+    return [];
+  }
+  const start_curve = matched_curves[0];
+  const end_curve = matched_curves[matched_curves.length - 1];
+  if (start_curve && end_curve) {
+    // console.log('start', start_curve.points[0]);
+    // console.log('end', end_curve.points[end_curve.points.length - 1]);
+    console.log("start and and", start, start_curve.points);
+    console.log(arc.end, end_curve.points);
+    const matched_start = findPointAtCurve(start, start_curve);
+    const matched_end = findPointAtCurve(arc.end, end_curve);
+    // console.log(matched_start, matched_end);
+    if (matched_start && matched_end) {
+      const start = {
+        // @ts-ignore
+        index: start_curve.__index,
+        t: matched_start.t,
+      };
+      const end = {
+        // @ts-ignore
+        index: end_curve.__index,
+        t: matched_end.t,
+      };
+      // console.log(start, end);
+      const first = start_curve.split(start.t, 1).points;
+      const last = end_curve.split(0, end.t).points;
+      // console.log("first and last", first, last);
+      const middles = [];
+      let i = start.index + 1;
+      while (i < end.index) {
+        const c = curves[i];
+        middles.push(c.points);
+        i += 1;
+      }
+      const points = [first, ...middles, last].filter(Boolean);
+      return points;
+    }
+  }
+  return [];
 }
