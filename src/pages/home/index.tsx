@@ -43,8 +43,9 @@ export const HomeIndexPage: ViewComponent = (props) => {
   // const d = `M 649.7674 305.9614 C 630.2507 305.9614 614.4454 321.9374 614.4454 341.6674 V 376.4989 C 614.4454 396.2289 630.2507 412.2262 649.7674 412.2262 C 669.2841 412.2262 685.0894 396.2289 685.0894 376.4989 V 341.6674 C 685.0894 321.9374 669.2841 305.9614 649.7674 305.9614 Z`;
   // const d = `M 648.128 241.7707 C 700.544 242.7307 743.424 258.752 774.9547 290.2827 C 806.5067 321.856 822.464 364.6933 823.2747 417.0027 A 32 32 0 1 1 759.2747 418.0053 C 758.72 381.4187 748.7147 354.5387 729.7067 335.552 C 710.6773 316.5227 683.6907 306.432 646.9333 305.7493 A 32 32 0 0 1 648.128 241.7707 Z`;
   // const d = `M 518.4 149.2907 C 630.9973 68.5013 786.2827 79.8933 886.528 181.2907 C 940.3947 235.8187 970.6667 310.144 970.6667 387.6693 C 970.6667 465.1947 940.3733 539.52 886.5707 594.0053 L 592.1493 893.5253 A 110.976 110.976 0 0 1 511.936 928 A 110.72 110.72 0 0 1 432.0213 893.824 L 137.3227 593.7707 C 83.5627 539.2427 53.3333 464.9813 53.3333 387.5413 S 83.5627 235.8187 137.344 181.2693 C 239.3173 78.1227 398.336 68.1173 511.36 153.6427 L 511.9147 154.0693 Z`;
+  // const d = `M 1129.1307 0 H 121.8316 A 109.6168 109.6168 0 0 0 12.1905 109.6411 V 219.2823 A 109.6168 109.6168 0 0 0 121.8316 328.9234 H 1129.1307 A 109.6168 109.6168 0 0 0 1238.7718 219.2823 V 109.6411 A 109.6168 109.6168 0 0 0 1129.1307 0 Z M 1156.5592 219.2823 C 1156.5592 234.3497 1144.2225 246.6865 1129.1307 246.6865 H 121.8316 A 27.5017 27.5017 0 0 1 94.4274 219.2823 V 109.6411 C 94.4274 94.5737 106.7642 82.237 121.8316 82.237 H 1129.1307 C 1144.2225 82.237 1156.5592 94.5737 1156.5592 109.6411 V 219.2823 Z M 1008.2499 512.5851 H 243.395 L 250.9288 430.3238 H 1000.7162 L 1008.2743 512.5608 Z M 260.2423 328.899 L 250.9288 430.3238 L 243.3707 512.5608 L 200.4846 976.4815 A 40.96 40.96 0 0 1 159.6465 1013.76 C 158.4274 1013.76 157.0621 1013.76 155.8187 1013.6137 A 41.0575 41.0575 0 0 1 118.6865 968.9234 L 177.8834 328.9234 H 260.2423 Z M 1095.9726 1013.6137 C 1094.7535 1013.76 1093.3638 1013.76 1092.1448 1013.76 C 1071.1771 1013.76 1053.2084 997.7173 1051.2823 976.4571 L 1008.2499 512.5608 L 1000.7162 430.3238 L 991.4027 328.899 H 1074.0541 L 1133.251 968.9234 A 41.2526 41.2526 0 0 1 1095.9726 1013.6137 Z`;
   const $input = new InputCore({
-    // defaultValue: `<svg t="1725376930087" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1891" data-spm-anchor-id="a313x.collections_detail.0.i4.361a3a81f5lUb4" width="200" height="200"><path d="${d}" fill="#111111" p-id="1892" data-spm-anchor-id="a313x.collections_detail.0.i2.361a3a81f5lUb4" class=""></path></svg>`,
+    // defaultValue: `<svg t="1725376930087" class="icon" viewBox="0 0 1043 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1891" data-spm-anchor-id="a313x.collections_detail.0.i4.361a3a81f5lUb4" width="200" height="200"><path d="${d}" fill="#111111" p-id="1892" data-spm-anchor-id="a313x.collections_detail.0.i2.361a3a81f5lUb4" class=""></path></svg>`,
     defaultValue: ``,
   });
 
@@ -66,7 +67,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
         const $$prev_path = $$canvas.paths[i - 1];
         const $$path = $$canvas.paths[i];
         const state = $$path.state;
-        console.log("before $$path.state.stroke.enabled", state.stroke.enabled);
+        // console.log("before $$path.state.stroke.enabled", state.stroke.enabled);
         if (state.stroke.enabled) {
           // 绘制描边
           // const curves = $$path.buildOutline({ cap: "butt" });
@@ -109,7 +110,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
           const prev = commands[i - 1];
           const command = commands[i];
           const next_command = commands[i + 1];
-          console.log("[PAGE]command", command.c);
+          // console.log("[PAGE]command", command.c);
           if (command.c === "M") {
             const [x, y] = command.a;
             // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
@@ -119,7 +120,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
             ctx.moveTo(x, y);
           }
           if (command.c === "A") {
-            console.log('A', command);
+            // console.log('A', command);
             const [c1x, c1y, radius, angle1, angle2, counterclockwise] = command.a;
             log(`ctx.arc(${c1x}, ${c1y}, ${radius}, ${angle1}, ${angle2}, ${Boolean(counterclockwise)});`);
             ctx.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
@@ -137,6 +138,11 @@ export const HomeIndexPage: ViewComponent = (props) => {
             //   ctx.moveTo(command.p.x, command.p.y);
             // }
           }
+          if (command.c === "Q") {
+            const [c1x, c1y, ex, ey] = command.a;
+            log(`ctx.quadraticCurveTo(${c1x}, ${c1y}, ${ex}, ${ey});`);
+            ctx.quadraticCurveTo(c1x, c1y, ex, ey);
+          }
           if (command.c === "L") {
             const [x, y] = command.a;
             log(`ctx.lineTo(${x}, ${y});`);
@@ -147,42 +153,55 @@ export const HomeIndexPage: ViewComponent = (props) => {
             ctx.closePath();
           }
         }
+        log(`ctx.strokeStyle = "lightgrey";`);
+        ctx.strokeStyle = "lightgrey";
+        log(`ctx.lineWidth = 1;`);
+        ctx.lineWidth = 1;
+        log(`ctx.stroke();`);
+        ctx.stroke();
         if (state.fill.enabled && $$path.closed) {
-          if ($$path.prev) {
-            const cur_size = $$path.size;
-            const prev_size = $$path.prev.size;
-            // console.log("----------------");
-            // console.log("check need update composition opertion");
-            // console.log(cur_size.x, cur_size.y, cur_size.x2, cur_size.y2);
-            // console.log(prev_size.x, prev_size.y, prev_size.x2, prev_size.y2);
-            if (
-              cur_size.x > prev_size.x &&
-              cur_size.y > prev_size.y &&
-              cur_size.x2 < prev_size.x2 &&
-              cur_size.y2 < prev_size.y2
-            ) {
-              log(`ctx.globalCompositeOperation = "destination-out";`);
-              ctx.globalCompositeOperation = "destination-out";
-            }
+          // if ($$path.prev) {
+          //   const cur_size = $$path.size;
+          //   const prev_size = $$path.prev.size;
+          //   // console.log("----------------");
+          //   // console.log("check need update composition opertion");
+          //   // console.log(cur_size.x, cur_size.y, cur_size.x2, cur_size.y2);
+          //   // console.log(prev_size.x, prev_size.y, prev_size.x2, prev_size.y2);
+          //   if (
+          //     cur_size.x > prev_size.x &&
+          //     cur_size.y > prev_size.y &&
+          //     cur_size.x2 < prev_size.x2 &&
+          //     cur_size.y2 < prev_size.y2
+          //   ) {
+          //     log(`ctx.globalCompositeOperation = "destination-out";`);
+          //     ctx.globalCompositeOperation = "destination-out";
+          //   }
+          // }
+          if ($$path.composite === "destination-out") {
+            log(`ctx.globalCompositeOperation = "${$$path.composite}";`);
+            ctx.globalCompositeOperation = $$path.composite;
           }
           log(`ctx.fillStyle = "${state.fill.color}";`);
           ctx.fillStyle = state.fill.color;
           log(`ctx.fill();`);
           ctx.fill();
-          log(`ctx.globalCompositeOperation = "source-over";`);
-          ctx.globalCompositeOperation = "source-over";
+          // if ($$path.composite === "destination-out") {
+          //   log(`ctx.globalCompositeOperation = "source-out";`);
+          //   ctx.globalCompositeOperation = "source-out";
+          // }
         }
         if (state.stroke.enabled) {
-          console.log("state.stroke.join", state.stroke.join);
+          log(`ctx.strokeStyle = "${state.stroke.color}";`);
           ctx.strokeStyle = state.stroke.color;
+          log(`ctx.lineWidth = ${$$canvas.grid.unit * state.stroke.width};`);
           ctx.lineWidth = $$canvas.grid.unit * state.stroke.width;
+          log(`ctx.lineCap = "${state.stroke.start_cap}";`);
           ctx.lineCap = state.stroke.start_cap;
+          log(`ctx.lineJoin = "${state.stroke.join}";`);
           ctx.lineJoin = state.stroke.join;
+          log(`ctx.stroke();`);
           ctx.stroke();
         }
-        ctx.strokeStyle = "lightgrey";
-        ctx.lineWidth = 1;
-        ctx.stroke();
         console.log(logs.join("\n"));
         ctx.restore();
 

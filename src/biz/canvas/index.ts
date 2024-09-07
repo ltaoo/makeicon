@@ -6,13 +6,15 @@ import {
   isCollinear,
   toBase64,
   calculateCircleArcs,
-  getSymmetricPoints,
+  findSymmetricPoint,
+  distanceOfPoints,
 } from "@/biz/path_point/utils";
 import { BezierPath } from "@/biz/bezier_path";
 import { BezierPoint } from "@/biz/bezier_point";
 import { PathParser } from "@/biz/svg/path-parser";
 
 const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
+const debug = false;
 
 enum Events {
   Update,
@@ -181,30 +183,38 @@ export function Canvas(props: CanvasProps) {
       Object.assign(_grid, grid);
     },
     normalizeX(v: number, extra: Partial<{ scale: number; precision: number; isExport: boolean }> = {}) {
+      if (debug) {
+        return v;
+      }
       const { scale = 1, precision = 2, isExport } = extra;
       const offset = 0;
       const v1 = v * scale;
       const v2 = isExport ? v1 - offset : v1 + offset;
       const x = parseFloat(v2.toFixed(precision));
       return x;
-      // return v;
     },
     normalizeY(v: number, extra: Partial<{ scale: number; precision: number; isExport: boolean }> = {}) {
+      if (debug) {
+        return v;
+      }
       const { scale = 1, precision = 2, isExport } = extra;
       const offset = 0;
       const v1 = v * scale;
       const v2 = isExport ? v1 - offset : v1 + offset;
       const y = parseFloat(v2.toFixed(precision));
       return y;
-      // return v;
     },
     translateX(v: number) {
+      if (debug) {
+        return v;
+      }
       return v + _grid.x;
-      // return v;
     },
     translateY(v: number) {
+      if (debug) {
+        return v;
+      }
       return v + _grid.y;
-      // return v;
     },
     translate(pos: { x: number; y: number }) {
       if (_pen_editing) {
@@ -427,15 +437,13 @@ export function Canvas(props: CanvasProps) {
         exp: false,
         scale: dimensions ? _grid.width / dimensions.width : 1,
       };
-      const yExtra = {
-        exp: false,
-        scale: dimensions ? _grid.height / dimensions.height : 1,
-      };
+      const yExtra = xExtra;
       // console.log("extra", xExtra.scale, yExtra.scale, dimensions, _grid.width, _grid.height);
       for (let j = 0; j < data.paths.length; j += 1) {
         const payload = data.paths[j];
         const content = payload.d;
         const tokens = PathParser.parse(content);
+        let composite_relative_path: BezierPath | null = null;
         let cur_path: BezierPath | null = null;
         let cur_path_point: PathPoint | null = null;
         let prev_path_point: PathPoint | null = null;
@@ -454,22 +462,42 @@ export function Canvas(props: CanvasProps) {
           const [command, ...args] = cur;
           const values = args.map((v) => Number(v));
           // console.log("cur command is", command);
+          if (i === tokens.length - 1) {
+            if (cur_path) {
+              if (cur_path.checkIsClosed()) {
+                cur_path.setClosed();
+              }
+            }
+          }
           if (["M", "m"].includes(command)) {
+            if (cur_path) {
+              if (cur_path.path_points.length === 1) {
+                // 如果路径只有一个 moveTo，就抛弃这个 path
+                //
+              }
+              if (cur_path.checkIsClosed()) {
+                cur_path.setClosed();
+              }
+            }
+
             let v0 = values[0];
             let v1 = values[1];
             let p = {
               x: this.normalizeX(v0, xExtra),
-              y: this.normalizeX(v1, yExtra),
+              y: this.normalizeY(v1, yExtra),
             };
             if (command === "m") {
               // moveTo(p);
               p.x += prev_start.x;
               p.y += prev_start.y;
+              if (i === 0) {
+                p = this.translate(p);
+              }
             } else {
               p = this.translate(p);
             }
             Object.assign(prev_start, p);
-            console.log("[BIZ]before new start point", v0, v1, prev_point);
+            // console.log("[BIZ]before new start point", v0, v1, prev_point);
             prev_point = p;
             const point = PathPoint({
               point: BezierPoint(p),
@@ -497,10 +525,47 @@ export function Canvas(props: CanvasProps) {
                 : null,
             });
             paths.push(new_path);
-            if (i !== 0 && cur_path) {
-              // 在一个 <path d="" 路径中，有多个开头，就把当前这个和前一个 关联 起来
-              // cur_path.setNext(new_path);
-              new_path.setPrev(cur_path);
+            if (cur_path) {
+              const cur_size = new_path.size;
+              const prev_size = cur_path.size;
+              console.log("cur size compare with prev_size", cur_size, prev_size);
+              // const start_size = composite_relative_path.size;
+              // new_path.setPrev(composite_relative_path);
+              if (
+                cur_size.x > prev_size.x &&
+                cur_size.y > prev_size.y &&
+                cur_size.x2 < prev_size.x2 &&
+                cur_size.y2 < prev_size.y2
+              ) {
+                // 当前这个，在前面那个的里面
+                if (cur_path.composite === "source-over") {
+                  new_path.setComposite("destination-out");
+                }
+                if (cur_path.composite === "destination-out") {
+                  composite_relative_path = new_path;
+                  new_path.setComposite("source-over");
+                }
+              }
+              // 如果前面那个，在当前这个的里面
+              if (composite_relative_path) {
+                const cur_size = new_path.size;
+                const prev_size = composite_relative_path.size;
+                if (
+                  cur_size.x > prev_size.x &&
+                  cur_size.y > prev_size.y &&
+                  cur_size.x2 < prev_size.x2 &&
+                  cur_size.y2 < prev_size.y2
+                ) {
+                  if (composite_relative_path.composite === "source-over") {
+                    new_path.setComposite("destination-out");
+                  }
+                  if (composite_relative_path.composite === "destination-out") {
+                  }
+                }
+              }
+            }
+            if (i === 0) {
+              composite_relative_path = new_path;
             }
             cur_path = new_path;
           }
@@ -518,7 +583,7 @@ export function Canvas(props: CanvasProps) {
               // @todo 这里是默认必定是圆形，但也可能是椭圆，后面支持吧。
               let p1 = { ...prev_point };
               let p2 = { x: this.normalizeX(x, xExtra), y: this.normalizeY(y, yExtra) };
-              const radius = this.normalizeX(rx, xExtra);
+              let radius = this.normalizeX(rx, xExtra);
               if (next_command === "a") {
                 // p2 = {
                 //   x: this.normalizeX(x, { ...xExtra, pureValue: true }),
@@ -530,7 +595,11 @@ export function Canvas(props: CanvasProps) {
               }
               prev_point = p2;
               const is_reverse = p1.x > p2.x;
-              console.log("[BIZ]canvas/index - before calculateCircleCenter", p1, p2, radius);
+              const distance = distanceOfPoints(p1, p2);
+              if (radius < distance / 2) {
+                radius = distance / 2;
+              }
+              // console.log("[BIZ]canvas/index - before calculateCircleCenter", p1, p2, radius);
               const centers = calculateCircleCenter(p1, p2, radius);
               if (centers) {
                 const [index1, index2] = (() => {
@@ -717,7 +786,7 @@ export function Canvas(props: CanvasProps) {
               cur_path.appendPoint(next_path_point);
             }
             if (["S", "s"].includes(next_command)) {
-              console.log("command S or s", !!cur_path_point, !!cur_path_point?.from, next_values);
+              // console.log("command S or s", !!cur_path_point, !!cur_path_point?.from, next_values);
               if (cur_path_point && cur_path_point.from) {
                 let v0 = next_values[0];
                 let v1 = next_values[1];
@@ -739,7 +808,7 @@ export function Canvas(props: CanvasProps) {
                   a3 = this.translate(a3);
                 }
                 prev_point = a3;
-                const a1 = getSymmetricPoints(cur_path_point.point.pos, cur_path_point.from.pos);
+                const a1 = findSymmetricPoint(cur_path_point.point.pos, cur_path_point.from.pos);
                 cur_path_point.setTo(BezierPoint(a1));
                 cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
                 // console.log("before create next_path_point", a2, a3);
@@ -753,28 +822,20 @@ export function Canvas(props: CanvasProps) {
                 cur_path.appendPoint(next_path_point);
               }
             }
-            if (["Q", "q", "T", "t"].includes(next_command)) {
+            if (["Q", "q"].includes(next_command)) {
               const v0 = next_values[0];
               const v1 = next_values[1];
-              const v4 = next_values[4];
-              const v5 = next_values[5];
+              const v2 = next_values[2];
+              const v3 = next_values[3];
               let a1 = {
                 x: this.normalizeX(v0, xExtra),
                 y: this.normalizeY(v1, yExtra),
               };
               let a2 = {
-                x: this.normalizeX(v4, xExtra),
-                y: this.normalizeY(v5, yExtra),
+                x: this.normalizeX(v2, xExtra),
+                y: this.normalizeY(v3, yExtra),
               };
-              if (["q", "t"].includes(next_command)) {
-                // a1 = {
-                //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
-                //   y: this.normalizeY(v1, { ...yExtra, pureValue: true }),
-                // };
-                // a2 = {
-                //   x: this.normalizeX(v4, { ...xExtra, pureValue: true }),
-                //   y: this.normalizeY(v5, { ...yExtra, pureValue: true }),
-                // };
+              if (["q"].includes(next_command)) {
                 moveTo(a1);
                 moveTo(a2);
               } else {
@@ -782,28 +843,47 @@ export function Canvas(props: CanvasProps) {
                 a2 = this.translate(a2);
               }
               prev_point = a2;
-              if (cur_path_point) {
-                cur_path_point.setTo(BezierPoint(a1));
-                if (cur_path_point.from) {
-                  const collinear = isCollinear(cur_path_point.from.pos, cur_path_point.point.pos, a1);
-                  cur_path_point.setMirror(PathPointMirrorTypes.NoMirror);
-                  if (collinear.collinear) {
-                    cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngle);
-                    if (collinear.midpoint) {
-                      cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
-                    }
-                  }
-                }
-              }
-              // console.log("create point", next_command, a2);
               const next_path_point = PathPoint({
                 point: BezierPoint(a2),
-                from: null,
+                from: BezierPoint(a1),
                 to: null,
                 virtual: false,
               });
               cur_path_point = next_path_point;
               cur_path.appendPoint(next_path_point);
+            }
+            if (["T", "t"].includes(next_command)) {
+              const v0 = next_values[0];
+              const v1 = next_values[1];
+              let a2 = {
+                x: this.normalizeX(v0, xExtra),
+                y: this.normalizeY(v1, yExtra),
+              };
+              if (["t"].includes(next_command)) {
+                moveTo(a2);
+              } else {
+                a2 = this.translate(a2);
+              }
+              prev_point = a2;
+              if (cur_path_point && cur_path_point.from) {
+                // const a1 = getSymmetricPoints(cur_path_point.point.pos, cur_path_point.from.pos);
+                const prev_x = cur_path_point.point.pos.x;
+                const prev_from_x = cur_path_point.from.pos.x;
+                const prev_y = cur_path_point.point.pos.y;
+                const prev_from_y = cur_path_point.from.pos.y;
+                const a1 = {
+                  x: prev_x + (prev_x - prev_from_x),
+                  y: prev_y + (prev_y - prev_from_y),
+                };
+                const next_path_point = PathPoint({
+                  point: BezierPoint(a2),
+                  from: BezierPoint(a1),
+                  to: null,
+                  virtual: false,
+                });
+                cur_path_point = next_path_point;
+                cur_path.appendPoint(next_path_point);
+              }
             }
           }
         }

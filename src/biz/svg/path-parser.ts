@@ -375,7 +375,6 @@ export class PathParser {
         throw new Error("malformed path (first error at " + cursor + ")");
       }
     }
-    console.log(tokens);
     return tokens;
   }
 }

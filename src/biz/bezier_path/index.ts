@@ -7,21 +7,23 @@ import { PathPoint, PathPointMirrorTypes } from "@/biz/path_point";
 import { BezierPoint } from "@/biz/bezier_point";
 import {
   calculateLineLength,
-  getHalfCirclePoints,
+  buildFourCurveOfCircle,
   getOutlineOfRect,
   getLineIntersection,
   toFixPoint,
   isCollinear,
   calculateCircleCenter,
   calculateCircleArcs,
+  distanceOfPoints,
 } from "@/biz/path_point/utils";
 
 // https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/stroke-linecap
 export type LineCapType = "butt" | "round" | "square";
 // export type LineJoinType = "miter" | "round" | "bevel" | "miter-clip" | "arcs";
-// https://developer.mozilla.org/zh-CN/docs/Web/API/CanvasRenderingContext2D/lineJoin
+// https://developer.mozilla.org/zh-CN/docs/Web/API/CanvasRenderingContext2D/lineJoin 只能通过 outline 模拟描边+join样式，才能支持更强的 join 效果
 export type LineJoinType = "round" | "bevel" | "miter";
-// 只能通过 outline 模拟描边+join样式，才能支持更强的 join 效果
+// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/globalCompositeOperation
+export type PathCompositeOperation = "source-over" | "destination-out";
 
 enum Events {
   Move,
@@ -90,6 +92,7 @@ export function BezierPath(props: BezierPathProps) {
     _fill.color = fill.color;
   }
   let _closed = false;
+  let _composite = "source-over" as PathCompositeOperation;
   let _min_x = 0;
   let _min_y = 0;
   let _max_x = 0;
@@ -137,6 +140,12 @@ export function BezierPath(props: BezierPathProps) {
     setClosed() {
       _closed = true;
     },
+    get composite() {
+      return _composite;
+    },
+    setComposite(v: PathCompositeOperation) {
+      _composite = v;
+    },
     get next() {
       const r = _next as BezierPath;
       return r;
@@ -155,8 +164,8 @@ export function BezierPath(props: BezierPathProps) {
       return {
         x: _min_x,
         y: _min_y,
-        width: _max_x - _min_x,
-        height: _max_y - _min_y,
+        width: Math.abs(_max_x - _min_x),
+        height: Math.abs(_max_y - _min_y),
         x2: _max_x,
         y2: _max_y,
       };
@@ -241,6 +250,17 @@ export function BezierPath(props: BezierPathProps) {
       }
       // _bezier_points.push(...mapToBezierPoints(_path_points));
       bus.emit(Events.PointCountChange);
+    },
+    checkIsClosed() {
+      const first_path_point = _path_points[0];
+      const last_path_point = _path_points[_path_points.length - 1];
+      if (first_path_point && last_path_point) {
+        if (distanceOfPoints(first_path_point.point.pos, last_path_point.point.pos) <= 0.1) {
+          first_path_point.setEnd(true);
+          return true;
+        }
+      }
+      return false;
     },
     buildOutline(options: Partial<{ width: number; cap: LineCapType; scene: number }> = {}) {
       const { cap = "round", width = 20, scene } = options;
@@ -447,7 +467,7 @@ export function BezierPath(props: BezierPathProps) {
       if (start_cap) {
         // console.log("start_cap", start_cap.points);
         if (cap === "round") {
-          const [tl2, tr2] = getHalfCirclePoints(start_cap.points[0], start_cap.points[1], start_cap.points[2]);
+          const [tl2, tr2] = buildFourCurveOfCircle(start_cap.points[0], start_cap.points[1], start_cap.points[2]);
           outline.push(tl2);
           outline.push(tr2);
         }
@@ -459,7 +479,7 @@ export function BezierPath(props: BezierPathProps) {
       if (end_cap) {
         // console.log("end_cap", end_cap.points);
         if (cap === "round") {
-          const [tl1, tr1] = getHalfCirclePoints(end_cap.points[0], end_cap.points[1], end_cap.points[2]);
+          const [tl1, tr1] = buildFourCurveOfCircle(end_cap.points[0], end_cap.points[1], end_cap.points[2]);
           outline.push(tl1);
           outline.push(tr1);
         }
@@ -516,7 +536,7 @@ export function BezierPath(props: BezierPathProps) {
             return;
           }
           if (prev && prev.to && cur.from) {
-            // 说明是一条曲线
+            // 三次贝塞尔
             commands.push({
               c: "C",
               a: [prev.to.x, prev.to.y, cur.from.x, cur.from.y, cur.x, cur.y],
@@ -525,9 +545,19 @@ export function BezierPath(props: BezierPathProps) {
             });
             return;
           }
+          if (cur.from) {
+            // 二次贝塞尔
+            commands.push({
+              c: "Q",
+              a: [cur.from.x, cur.from.y, cur.point.x, cur.point.y],
+              end: prev ? prev.point.pos : null,
+              start: next && !next.from ? cur.point.pos : null,
+            });
+            return;
+          }
           if (cur.circle) {
-            // 说明是一条弧线
-            console.log("[BIZ]bezier_path - index - after if (cur.circle", cur.circle.center, cur.circle.arc);
+            // 弧线
+            // console.log("[BIZ]bezier_path - index - after if (cur.circle", cur.circle.center, cur.circle.arc);
             const { counterclockwise, extra } = cur.circle;
             commands.push({
               c: "A",
@@ -558,7 +588,7 @@ export function BezierPath(props: BezierPathProps) {
             return;
           }
           if (prev && !prev.to && !cur.from) {
-            // 一条直线
+            // 直线
             commands.push({
               c: "L",
               a: [cur.x, cur.y],

@@ -1,8 +1,8 @@
 import { Bezier } from "@/utils/bezier/bezier";
 
-import { PathPoint } from "./index";
+import { CircleCurved, PathPoint } from "./index";
 
-export function getSymmetricPoints(point2: { x: number; y: number }, point: { x: number; y: number }) {
+export function findSymmetricPoint(point2: { x: number; y: number }, point: { x: number; y: number }) {
   const symmetricPoint = {
     x: 2 * point2.x - point.x,
     y: 2 * point2.y - point.y,
@@ -29,7 +29,7 @@ export function getSymmetricPoint2(
   };
   // console.log("a4_prime", a4_prime);
   // 计算与 m1 到 a4' 的距离
-  const d = Math.sqrt((m1.x - a3.x) ** 2 + (m1.y - a3.y) ** 2);
+  // const d = Math.sqrt((m1.x - a3.x) ** 2 + (m1.y - a3.y) ** 2);
   // 计算点 a4
   const a4 = {
     x: m1.x + ratio * (a4_prime.x - m1.x),
@@ -94,7 +94,7 @@ export const CurveLikeCircleRatio = 0.551915024494;
 /**
  * 根据给定的三个在一条直线上的点，获取以该直线为直径的，构成圆的四条贝塞尔曲线
  */
-export function getHalfCirclePoints(
+export function buildFourCurveOfCircle(
   f1: { x: number; y: number },
   f5: { x: number; y: number },
   f3: { x: number; y: number }
@@ -110,22 +110,6 @@ export function getHalfCirclePoints(
     new Bezier([f2, bl, lb, f3]),
     new Bezier([f3, lt, tl, f4]),
     new Bezier([f4, tr, rt, f1]),
-    // {
-    //   points: [f1, rb, br, f2],
-    //   _linear: false,
-    // },
-    // {
-    //   points: [f2, bl, lb, f3],
-    //   _linear: false,
-    // },
-    // {
-    //   points: [f3, lt, tl, f4],
-    //   _linear: false,
-    // },
-    // {
-    //   points: [f4, tr, rt, f1],
-    //   _linear: false,
-    // },
   ];
 }
 
@@ -282,7 +266,8 @@ export function calculateCircleCenter(a1: { x: number; y: number }, a2: { x: num
   const dy = y2 - y1;
   const d = parseFloat(Math.sqrt(dx * dx + dy * dy).toFixed(3));
   if (d - 2 * r >= 0.05) {
-    console.log("The points are too far apart for the given radius.");
+    console.warn("The points are too far apart for the given radius.");
+    console.log(dx, dy, d, 2 * r, a1, a2);
     return null;
   }
   const mx = (x1 + x2) / 2;
@@ -321,4 +306,74 @@ export function calculateCircleArcs(
       end: startAngle + 2 * Math.PI,
     },
   ];
+}
+
+export function distanceOfPoints(a1: { x: number; y: number }, a2: { x: number; y: number }) {
+  const point = a1;
+  const x1 = Math.abs(point.x - a2.x);
+  const y1 = Math.abs(point.y - a2.y);
+  const r = Math.sqrt(Math.pow(x1, 2) + Math.pow(y1, 2));
+  return r;
+}
+
+export function arcToCanvasArc(
+  p1: { x: number; y: number },
+  arc: {
+    rx: number;
+    ry: number;
+    rotate: number;
+    t1: number;
+    t2: number;
+    end: { x: number; y: number };
+  }
+) {
+  const { rx, ry, rotate, end, t1, t2 } = arc;
+  let radius = rx;
+  const p2 = end;
+  const is_reverse = p1.x > p2.x;
+  const distance = distanceOfPoints(p1, p2);
+  if (radius < distance / 2) {
+    radius = distance / 2;
+  }
+  // console.log("[BIZ]canvas/index - before calculateCircleCenter", p1, p2, radius);
+  const centers = calculateCircleCenter(p1, p2, radius);
+  if (centers) {
+    const [index1, index2] = (() => {
+      if (t1 === 0 && t2 === 0) {
+        return [0, 1];
+      }
+      if (t1 === 0 && t2 === 1) {
+        return [1, 0];
+      }
+      if (t1 === 1 && t2 === 0) {
+        return [1, 1];
+      }
+      if (t1 === 1 && t2 === 1) {
+        return [0, 0];
+      }
+      return [0, 1];
+    })();
+    const center = centers[index1];
+    const arcs = calculateCircleArcs(center, p1, p2);
+    const arc = arcs[index2];
+    // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
+    const circle: CircleCurved = {
+      center,
+      radius,
+      arc,
+      counterclockwise: (() => {
+        if (t1 === 0 && t2 === 0) {
+          return true;
+        }
+        if (t1 === 1 && t2 === 0) {
+          if (is_reverse) {
+            return true;
+          }
+        }
+        return false;
+      })(),
+      extra: { start: p1, rx, ry, rotate, t1, t2 },
+    };
+    return circle;
+  }
 }

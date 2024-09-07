@@ -1,7 +1,7 @@
 import { base, Handler } from "@/domains/base";
 import { BezierPoint } from "@/biz/bezier_point";
 
-import { getSymmetricPoints } from "./utils";
+import { findSymmetricPoint } from "./utils";
 
 enum Events {
   Move,
@@ -57,11 +57,11 @@ export function PathPoint(props: PathPointProps) {
   /** 表示隐藏，不绘制 */
   let _hidden = false;
   if (_mirror === PathPointMirrorTypes.MirrorAngleAndLength && _from && !_to) {
-    const symPoint = getSymmetricPoints({ x: point.x, y: point.y }, _from);
+    const symPoint = findSymmetricPoint({ x: point.x, y: point.y }, _from);
     _to = BezierPoint(symPoint);
   }
   if (_mirror === PathPointMirrorTypes.MirrorAngleAndLength && _to && !_from) {
-    const symPoint = getSymmetricPoints({ x: point.x, y: point.y }, _to);
+    const symPoint = findSymmetricPoint({ x: point.x, y: point.y }, _to);
     _from = BezierPoint(symPoint);
   }
   let _circle = circle;
@@ -100,11 +100,11 @@ export function PathPoint(props: PathPointProps) {
     const t = _to;
     if (f && t) {
       f.onMove((v) => {
-        const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, f);
+        const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, f);
         t.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
       });
       f.onMove((v) => {
-        const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, t);
+        const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, t);
         f.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
       });
     }
@@ -135,7 +135,7 @@ export function PathPoint(props: PathPointProps) {
       const t = _to;
       // console.log("[BIZ]path_point/index - setTo", _mirror, t);
       if (_mirror === PathPointMirrorTypes.MirrorAngleAndLength) {
-        const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, t);
+        const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, t);
         _from = BezierPoint({
           x: symPoint.x,
           y: symPoint.y,
@@ -143,11 +143,11 @@ export function PathPoint(props: PathPointProps) {
         // const t = _to;
         const f = _from;
         f.onMove(() => {
-          const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, f);
+          const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, f);
           t.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
         });
         t.onMove(() => {
-          const symPoint = getSymmetricPoints({ x: _point.x, y: _point.y }, t);
+          const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, t);
           f.move({ x: symPoint.x, y: symPoint.y }, { silence: true });
         });
       }
