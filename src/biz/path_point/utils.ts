@@ -10,11 +10,11 @@ export function findSymmetricPoint(point2: { x: number; y: number }, point: { x:
   return symmetricPoint;
 }
 function findSymmetricPoint2(a1: { x: number; y: number }, a2: { x: number; y: number }) {
-  const mx = (a1.x + a2.x) / 2;
-  const my = (a1.y + a2.y) / 2;
+  // const mx = (a1.x + a2.x) / 2;
+  // const my = (a1.y + a2.y) / 2;
   const dx = a2.x - a1.x;
   const dy = a2.y - a1.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
+  // const distance = Math.sqrt(dx * dx + dy * dy);
   const a3 = {
     x: a2.x + dx,
     y: a2.y + dy,
@@ -308,6 +308,7 @@ export function calculateCircleCenter(a1: { x: number; y: number }, a2: { x: num
   const d = parseFloat(Math.sqrt(dx * dx + dy * dy).toFixed(3));
   if (d - 2 * r >= 0.05) {
     console.warn("The points are too far apart for the given radius.");
+    console.log(d, 2 * r, d - 2 * r);
     console.log(dx, dy, d, 2 * r, a1, a2);
     return null;
   }
@@ -436,7 +437,8 @@ function calculateCircleArcs2(
 
 function findPointAtCurve(
   target: { x: number; y: number },
-  curve: Bezier
+  curve: Bezier,
+  segments = 100
 ): null | { t: number; index: number; x: number; y: number } {
   const [p1, c1, c2, p2] = curve.points;
   // console.log(p1, p2);
@@ -448,7 +450,24 @@ function findPointAtCurve(
     // @ts-ignore
     return { t: 1, index: curve.__index, ...p2 };
   }
-  const lut = curve.getLUT(100);
+  if (segments >= 10000) {
+    const guess = curve.split(0, 0.2);
+    const lut = guess.getLUT(100);
+    const matched = (() => {
+      for (let i = 1; i < lut.length; i += 1) {
+        const point = lut[i];
+        const r = distanceOfPoints(target, point);
+        if (r < 1) {
+          // @ts-ignore
+          return { ...point, index: curve.__index };
+        }
+      }
+    })();
+    if (matched) {
+      return matched;
+    }
+  }
+  const lut = curve.getLUT(segments);
   const matched = (() => {
     for (let i = 1; i < lut.length; i += 1) {
       const point = lut[i];
@@ -599,13 +618,13 @@ export function arc_to_curve(
     }
     return false;
   });
-  console.log("matched curves", matched_curves, arcForCanvas.counterclockwise);
+  // console.log("matched curves", matched_curves, arcForCanvas.counterclockwise);
   if (matched_curves.length === 1) {
     const bezier = matched_curves[0];
-    const t = findPointAtCurve(arc.end, bezier);
+    const t = findPointAtCurve(arc.end, bezier, Math.pow(10, arcForCanvas.radius.toFixed(0).length));
     if (t) {
       const points = bezier.split(0, t.t).points;
-      return [points];
+      return [points].filter(Boolean);
     }
     return [];
   }
@@ -614,8 +633,8 @@ export function arc_to_curve(
   if (start_curve && end_curve) {
     // console.log('start', start_curve.points[0]);
     // console.log('end', end_curve.points[end_curve.points.length - 1]);
-    console.log("start and and", start, start_curve.points);
-    console.log(arc.end, end_curve.points);
+    // console.log("start and and", start, start_curve.points);
+    // console.log(arc.end, end_curve.points);
     const matched_start = findPointAtCurve(start, start_curve);
     const matched_end = findPointAtCurve(arc.end, end_curve);
     // console.log(matched_start, matched_end);
@@ -646,4 +665,19 @@ export function arc_to_curve(
     }
   }
   return [];
+}
+
+export function checkIsClockwise(points: { x: number; y: number }[]) {
+  let angleSum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % points.length];
+    const vectorX = p2.x - p1.x;
+    const vectorY = p2.y - p1.y;
+    const prevVectorX = i === 0 ? points[points.length - 1].x - p1.x : points[i - 1].x - p1.x;
+    const prevVectorY = i === 0 ? points[points.length - 1].y - p1.y : points[i - 1].y - p1.y;
+    const crossProduct = prevVectorX * vectorY - prevVectorY * vectorX;
+    angleSum += crossProduct;
+  }
+  return angleSum > 0 ? false : true;
 }

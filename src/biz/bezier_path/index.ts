@@ -92,6 +92,7 @@ export function BezierPath(props: BezierPathProps) {
     _fill.color = fill.color;
   }
   let _closed = false;
+  let _clockwise = true;
   let _composite = "source-over" as PathCompositeOperation;
   let _min_x = 0;
   let _min_y = 0;
@@ -140,6 +141,12 @@ export function BezierPath(props: BezierPathProps) {
     setClosed() {
       _closed = true;
     },
+    get clockwise() {
+      return _clockwise;
+    },
+    setClockWise(v: boolean) {
+      _clockwise = v;
+    },
     get composite() {
       return _composite;
     },
@@ -169,6 +176,21 @@ export function BezierPath(props: BezierPathProps) {
         x2: _max_x,
         y2: _max_y,
       };
+    },
+    isInnerOf(b: unknown) {
+      const other = b as BezierPath;
+      const cur_size = this.size;
+      const prev_size = other.size;
+      // console.log("cur size compare with prev_size", cur_size, prev_size);
+      if (
+        cur_size.x > prev_size.x &&
+        cur_size.y > prev_size.y &&
+        cur_size.x2 < prev_size.x2 &&
+        cur_size.y2 < prev_size.y2
+      ) {
+        return true;
+      }
+      return false;
     },
     get state() {
       return _state;
@@ -214,12 +236,14 @@ export function BezierPath(props: BezierPathProps) {
     },
     removeLastVirtualPoint() {
       const last = _path_points[_path_points.length - 1];
+      // console.log("[BIZ]bezier_path removeLastVirtualPoint", last?.point.pos, last?.virtual);
       if (!last) {
         return;
       }
-      if (!last.virtual) {
+      if (last.virtual === false) {
         return;
       }
+      // console.log("[BIZ]bezier_path before _path_points.filter", last.virtual);
       _path_points = _path_points.filter((p) => p !== last);
       refresh_bezier_points();
       bus.emit(Events.PointCountChange);
@@ -229,7 +253,10 @@ export function BezierPath(props: BezierPathProps) {
       if (!last) {
         return;
       }
-      // console.log("[BIZ]bezier_path/index - removeLastPoint", last);
+      // if (last.virtual === false) {
+      //   return;
+      // }
+      // console.log("[BIZ]bezier_path/index - removeLastPoint", last.uid, last.point.pos, last.virtual);
       _path_points = _path_points.filter((p) => p !== last);
       refresh_bezier_points();
       bus.emit(Events.PointCountChange);
@@ -272,6 +299,7 @@ export function BezierPath(props: BezierPathProps) {
     checkIsClosed() {
       const first_path_point = _path_points[0];
       const last_path_point = _path_points[_path_points.length - 1];
+      // console.log("[BIZ]bezier_path - checkIsClosed", first_path_point.point.pos, last_path_point.point.pos);
       if (first_path_point && last_path_point) {
         if (distanceOfPoints(first_path_point.point.pos, last_path_point.point.pos) <= 0.1) {
           first_path_point.setEnd(true);
@@ -532,7 +560,7 @@ export function BezierPath(props: BezierPathProps) {
         end: null | { x: number; y: number };
         start: null | { x: number; y: number };
       }[] = [];
-      // console.log("[BIZ]bezier_path/index - getCommands", _path_points, _bezier_points.length);
+      console.log("[BIZ]bezier_path/index - getCommands", _path_points);
       let is_closed: null | PathPoint = null;
       for (let i = 0; i < _path_points.length; i += 1) {
         const prev = _path_points[i - 1];
@@ -619,23 +647,24 @@ export function BezierPath(props: BezierPathProps) {
           }
         })();
         if (!next && is_closed) {
-          // if (cur.to && is_closed.from) {
-          //   // 这个是为什么？
-          //   commands.push({
-          //     c: "C",
-          //     a: [cur.to.x, cur.to.y, is_closed.from.x, is_closed.from.y, is_closed.point.x, is_closed.point.y],
-          //     end: prev ? prev.point.pos : null,
-          //     start: null,
-          //   });
-          // }
-          // if (!cur.to && !is_closed.from) {
-          //   commands.push({
-          //     c: "L",
-          //     a: [is_closed.point.x, is_closed.point.y],
-          //     end: prev ? prev.point.pos : null,
-          //     start: null,
-          //   });
-          // }
+          if (cur.to && is_closed.from) {
+            // 比如 起点，一条曲线，然后再一条曲线直接回到起点，形成闭合
+            // 那么作为最后一个点，是没有 next，但是路径又闭合了，此时是还需要一条路径的
+            commands.push({
+              c: "C",
+              a: [cur.to.x, cur.to.y, is_closed.from.x, is_closed.from.y, is_closed.point.x, is_closed.point.y],
+              end: prev ? prev.point.pos : null,
+              start: null,
+            });
+          }
+          if (!cur.to && !is_closed.from) {
+            commands.push({
+              c: "L",
+              a: [is_closed.point.x, is_closed.point.y],
+              end: prev ? prev.point.pos : null,
+              start: null,
+            });
+          }
           commands.push({
             c: "Z",
             a: [],
@@ -645,6 +674,7 @@ export function BezierPath(props: BezierPathProps) {
         }
       }
       // const buildOutline
+      // console.log("before return commands", commands);
       return commands;
     },
     onPointCountChange(handler: Handler<TheTypesOfEvents[Events.PointCountChange]>) {

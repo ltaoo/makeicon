@@ -9,22 +9,28 @@ import {
   findSymmetricPoint,
   distanceOfPoints,
   arc_to_curve,
+  checkIsClockwise,
 } from "@/biz/path_point/utils";
 import { BezierPath, LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/bezier_path";
 import { BezierPoint } from "@/biz/bezier_point";
+import { Path } from "@/biz/path";
 import { PathParser } from "@/biz/svg/path-parser";
 import { objectToHTML } from "@/utils";
 
 const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
+export type CursorType = "select" | "pen";
 const debug = false;
 
 type CanvasProps = {
-  paths: BezierPath[];
+  paths: Path[];
 };
 export function Canvas(props: CanvasProps) {
   const { paths } = props;
 
   let _paths = paths;
+  let _bezier_paths = _paths.reduce((prev, cur) => {
+    return prev.concat(cur.paths);
+  }, [] as BezierPath[]);
   let _points: BezierPoint[] = [];
   let _path_points: PathPoint[] = [];
   let _layers: CanvasLayer[] = [
@@ -41,6 +47,10 @@ export function Canvas(props: CanvasProps) {
     CanvasLayer({
       index: 2,
       zIndex: 99,
+    }),
+    CanvasLayer({
+      index: 3,
+      zIndex: 9,
     }),
   ];
   let _mounted = false;
@@ -87,7 +97,12 @@ export function Canvas(props: CanvasProps) {
   let _prev_point: BezierPoint | null = null;
   /** 当前拖动的点，可能是 锚点、坐标点 */
   let _cur_point: BezierPoint | null = null;
-  let _cur_path: BezierPath | null = null;
+  let _cur_bezier_path: BezierPath | null = null;
+  let _cur_path: Path = _paths[0];
+  // if (!_cur_path) {
+  //   _cur_path = Path({});
+  //   _paths.push(_cur_path);
+  // }
   /** 当前是否激活钢笔工具 */
   let _pen_editing = 0;
   /** 当前是否激活选择工具 */
@@ -96,8 +111,14 @@ export function Canvas(props: CanvasProps) {
   let _debug = false;
 
   const _state = {
-    get cursor() {
-      return _cursor_editing;
+    get cursor(): CursorType {
+      if (_cursor_editing) {
+        return "select";
+      }
+      if (_pen_editing) {
+        return "pen";
+      }
+      return "select";
     },
     get pen() {
       return _pen_editing;
@@ -148,8 +169,8 @@ export function Canvas(props: CanvasProps) {
   function updatePoints() {
     const points: BezierPoint[] = [];
     const path_points: PathPoint[] = [];
-    for (let i = 0; i < _paths.length; i += 1) {
-      const path = _paths[i];
+    for (let i = 0; i < _bezier_paths.length; i += 1) {
+      const path = _bezier_paths[i];
       points.push(...path.points);
       path_points.push(...path.path_points);
     }
@@ -200,7 +221,7 @@ export function Canvas(props: CanvasProps) {
       if (debug) {
         return v;
       }
-      const { scale = 1, precision = 2, isExport } = extra;
+      const { scale = 1, precision = 3, isExport } = extra;
       const offset = 0;
       const v1 = v * scale;
       const v2 = isExport ? v1 - offset : v1 + offset;
@@ -211,7 +232,7 @@ export function Canvas(props: CanvasProps) {
       if (debug) {
         return v;
       }
-      const { scale = 1, precision = 2, isExport } = extra;
+      const { scale = 1, precision = 3, isExport } = extra;
       const offset = 0;
       const v1 = v * scale;
       const v2 = isExport ? v1 - offset : v1 + offset;
@@ -259,43 +280,45 @@ export function Canvas(props: CanvasProps) {
       if (!_cur_point) {
         return;
       }
-      for (let i = 0; i < paths.length; i += 1) {
-        const path = paths[i];
-        path.deletePoint(_cur_point);
-      }
+      // for (let i = 0; i < _bezier_paths.length; i += 1) {
+      //   const path = paths[i];
+      //   path.deletePoint(_cur_point);
+      // }
       bus.emit(Events.Update);
     },
     getCurPath() {
-      return _cur_path;
+      return _cur_bezier_path;
     },
-    cancelPen() {},
     selectPen() {
-      _pen_editing = 1;
-      _cursor_editing = 1;
-      bus.emit(Events.Change, { ..._state });
-    },
-    cancelCursor() {
       _cursor_editing = 0;
-      bus.emit(Events.Update);
+      _pen_editing = 1;
+      _cur_path = Path({
+        fill: {
+          color: "#111111",
+        },
+      });
+      _paths.push(_cur_path);
       bus.emit(Events.Change, { ..._state });
     },
     selectCursor() {
-      // _cursor_editing = 1;
-      if (_pen_editing && _cur_path) {
-        _cur_path.removeLastVirtualPoint();
+      if (_pen_editing && _cur_bezier_path) {
+        _cur_bezier_path.removeLastVirtualPoint();
       }
       _pen_editing = 0;
+      _cursor_editing = 1;
       _cur_path_point = null;
       _cur_point = null;
       updatePoints();
       bus.emit(Events.Update);
       bus.emit(Events.Change, { ..._state });
     },
-    buildSVGPath(options: Partial<{ scale: number }> = {}) {
+    buildSVGPaths(options: Partial<{ scale: number }> = {}) {
       const { scale } = options;
-      let d = "";
+      const path_string_arr: (Path["state"] & { d: string })[] = [];
+      // console.log("[BIZ]canvas/index - buildSVGPaths before for(let i", paths.length);
       for (let i = 0; i < _paths.length; i += 1) {
         const path = _paths[i];
+        let d = "";
         // const { outline } = path.buildOutline({ cap: options.cap, scene: 1 });
         // const first = outline[0];
         // if (!first) {
@@ -326,48 +349,56 @@ export function Canvas(props: CanvasProps) {
         //   })();
         // }
         // d += "Z";
-        const commands = path.buildCommands();
-        for (let i = 0; i < commands.length; i += 1) {
-          const { c, a, a2 } = commands[i];
-          if (i === 0) {
-            d += `M${this.transformPos2({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
+        for (let j = 0; j < path.paths.length; j += 1) {
+          const commands = path.paths[j].buildCommands();
+          for (let i = 0; i < commands.length; i += 1) {
+            const { c, a, a2 } = commands[i];
+            if (i === 0) {
+              d += `M${this.transformPos2({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
+            }
+            (() => {
+              if (c === "L") {
+                d += `L${this.transformPos2({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
+                return;
+              }
+              if (c === "A" && a2) {
+                const end = [a2[5], a2[6]];
+                const rrr = [
+                  a2[0],
+                  a2[1],
+                  a2[2],
+                  a2[3],
+                  a2[4],
+                  ...this.transformPos2({ x: end[0], y: end[1] }, { scale }),
+                ].join(" ");
+                d += `A${rrr}`;
+                return;
+              }
+              if (c === "C") {
+                d += `C${[
+                  ...this.transformPos2({ x: a[0], y: a[1] }, { scale }),
+                  ...this.transformPos2({ x: a[2], y: a[3] }, { scale }),
+                  ...this.transformPos2({ x: a[4], y: a[5] }, { scale }),
+                ].join(" ")}`;
+                return;
+              }
+              if (c === "Q") {
+                d += `Q${[
+                  ...this.transformPos2({ x: a[0], y: a[1] }, { scale }),
+                  ...this.transformPos2({ x: a[2], y: a[3] }, { scale }),
+                ].join(" ")}`;
+              }
+            })();
           }
-          (() => {
-            if (c === "L") {
-              d += `L${this.transformPos2({ x: a[0], y: a[1] }, { scale }).join(" ")}`;
-              return;
-            }
-            if (c === "A" && a2) {
-              const end = [a2[5], a2[6]];
-              const rrr = [
-                a2[0],
-                a2[1],
-                a2[2],
-                a2[3],
-                a2[4],
-                ...this.transformPos2({ x: end[0], y: end[1] }, { scale }),
-              ].join(" ");
-              d += `A${rrr}`;
-              return;
-            }
-            if (c === "C") {
-              d += `C${[
-                ...this.transformPos2({ x: a[0], y: a[1] }, { scale }),
-                ...this.transformPos2({ x: a[2], y: a[3] }, { scale }),
-                ...this.transformPos2({ x: a[4], y: a[5] }, { scale }),
-              ].join(" ")}`;
-              return;
-            }
-            if (c === "Q") {
-              d += `Q${[
-                ...this.transformPos2({ x: a[0], y: a[1] }, { scale }),
-                ...this.transformPos2({ x: a[2], y: a[3] }, { scale }),
-              ].join(" ")}`;
-            }
-          })();
         }
+        path_string_arr.push({
+          d,
+          fill: path.state.fill,
+          stroke: path.state.stroke,
+          composite: path.state.composite,
+        });
       }
-      return d;
+      return path_string_arr;
     },
     buildSVGJSON(options: Partial<{ cap: LineCapType; join: LineJoinType; width: number; height: number }> = {}) {
       const scale = 1;
@@ -379,15 +410,43 @@ export function Canvas(props: CanvasProps) {
         width: options.width || box.width,
         height: options.height || box.height,
       };
-      const d = this.buildSVGPath({ scale });
-      if (d === "d") {
+      const arr = this.buildSVGPaths({ scale });
+      // console.log("[BIZ]canvas/index - buildSVGJSON after this.buildSVGPaths", arr);
+      if (arr.length === 0) {
         return null;
       }
-      const path: Record<string, string> = {
-        id: "svg_1",
-        tag: "path",
-        d,
-      };
+      const paths: Record<string, string>[] = arr.map((d, i) => {
+        const data: {
+          id: string;
+          tag: string;
+          d: string;
+          fill?: string;
+          stroke?: string;
+          "stroke-width"?: string;
+          "stroke-linecap"?: string;
+          "stroke-linejoin"?: string;
+        } = {
+          id: `svg_${i + 1}`,
+          tag: "path",
+          d: d.d,
+        };
+        if (d.fill.enabled) {
+          data.fill = d.fill.color;
+        }
+        if (d.stroke.enabled) {
+          data.stroke = d.stroke.color;
+          if (d.stroke.width) {
+            data["stroke-width"] = String(d.stroke.width * _grid.unit);
+          }
+          if (d.stroke.start_cap) {
+            data["stroke-linecap"] = d.stroke.start_cap;
+          }
+          if (d.stroke.join) {
+            data["stroke-linejoin"] = d.stroke.join;
+          }
+        }
+        return data;
+      });
       const svg = {
         tag: "svg",
         viewBox: `0 0 ${box.width} ${box.height}`,
@@ -397,15 +456,10 @@ export function Canvas(props: CanvasProps) {
         "xmlns:svg": "http://www.w3.org/2000/svg",
         class: "icon",
         version: "1.1",
-        children: [
-          {
-            tag: "g",
-            class: "layer",
-            children: [path],
-          },
-        ],
+        fill: "none",
+        children: paths,
       };
-      path.fill = "#111111";
+      // path.fill = "#111111";
       // const svg = `<svg viewBox="0 0 ${box.width} ${box.height}" width="${size.width}" height="${size.height}" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" class="icon" version="1.1"><g class="layer">`;
       // svg += `<path d="${d}" fill="#111111" id="svg_1" />`;
       // if (path.state.stroke.enabled) {
@@ -426,7 +480,7 @@ export function Canvas(props: CanvasProps) {
       }
       const str = objectToHTML(svg);
       const url = toBase64(str, { doubleQuote: true });
-      const template = `.icon-example {\n-webkit-mask:url('${url}') no-repeat 50% 50%;\n-webkit-mask-size: cover;\n}`;
+      const template = `.icon-example {\n\t-webkit-mask:url('${url}') no-repeat 50% 50%;\n\t-webkit-mask-size: cover;\n}`;
       return template;
     },
     preview() {
@@ -434,6 +488,7 @@ export function Canvas(props: CanvasProps) {
       if (!svg) {
         return [];
       }
+      console.log("[BIZ]canvas - preview", svg);
       svg.width = 64;
       svg.height = 64;
       const str1 = objectToHTML(svg);
@@ -457,14 +512,65 @@ export function Canvas(props: CanvasProps) {
         text: `${_mx2},${_my2}`,
       };
     },
+    format(paths: Path[]) {
+      for (let i = 0; i < paths.length; i += 1) {
+        const path = paths[i];
+        const sub_paths = path.paths;
+        let composite_relative_path: BezierPath | null = null;
+        for (let j = 0; j < sub_paths.length; j += 1) {
+          const cur_sub_path = sub_paths[j];
+          const next_sub_path = sub_paths[j + 1];
+          // console.log("process sub_path", i, j, cur_sub_path.clockwise, next_sub_path?.clockwise);
+          if (next_sub_path) {
+            if (next_sub_path.clockwise && !cur_sub_path.clockwise) {
+              // 这一个是逆时针，下一个是顺时针
+              if (cur_sub_path.isInnerOf(next_sub_path)) {
+                // 当前这个，在下一个的里面，那这一个的混合模式需要 减去
+                cur_sub_path.setComposite("destination-out");
+                // 并且，两个还要调换顺序！！！
+                sub_paths[j + 1] = cur_sub_path;
+                sub_paths[j] = next_sub_path;
+                j += 1;
+              }
+              if (next_sub_path.isInnerOf(cur_sub_path)) {
+                composite_relative_path = cur_sub_path;
+                // 当前这个，包裹了下一个，
+                next_sub_path.setComposite("destination-out");
+                j += 1;
+              }
+            }
+            if (cur_sub_path.clockwise && !next_sub_path.clockwise) {
+              // 这一个是顺时针，下一个是逆时针，这属于最标准的画法
+              if (next_sub_path.isInnerOf(cur_sub_path)) {
+                composite_relative_path = cur_sub_path;
+                next_sub_path.setComposite("destination-out");
+                j += 1;
+              }
+            }
+          }
+          if (composite_relative_path) {
+            if (cur_sub_path.clockwise !== composite_relative_path.clockwise) {
+              if (cur_sub_path.isInnerOf(composite_relative_path)) {
+                cur_sub_path.setComposite("destination-out");
+              }
+            }
+          }
+        }
+      }
+      return paths;
+    },
     get paths() {
       return _paths;
     },
     setPaths(
-      paths: BezierPath[],
+      paths: Path[],
       extra: Partial<{ transform: boolean; dimensions: { width: number; height: number } }> = {}
     ) {
-      _paths = paths;
+      // console.log("[BIZ]canvas/index - setPaths", paths);
+      _paths = this.format(paths);
+      _bezier_paths = _paths.reduce((prev, cur) => {
+        return prev.concat(cur.paths);
+      }, [] as BezierPath[]);
       updatePoints();
       // if (extra.transform) {
       //   for (let i = 0; i < _paths.length; i += 1) {
@@ -509,7 +615,7 @@ export function Canvas(props: CanvasProps) {
         return null;
       }
       const data = PathParser.parse_svg(svg);
-      const paths = [];
+      const paths: Path[] = [];
       const { dimensions } = data;
       const xExtra = {
         exp: false,
@@ -521,6 +627,21 @@ export function Canvas(props: CanvasProps) {
         const payload = data.paths[j];
         const content = payload.d;
         const tokens = PathParser.parse(content);
+        const pppp = Path({
+          fill: payload.fill
+            ? {
+                color: payload.fill,
+              }
+            : null,
+          stroke: payload.stroke
+            ? {
+                color: payload.stroke,
+                width: payload.strokeWidth || 1,
+                cap: payload.lineCap,
+                join: payload.lineJoin,
+              }
+            : null,
+        });
         let composite_relative_path: BezierPath | null = null;
         let cur_path: BezierPath | null = null;
         let cur_path_point: PathPoint | null = null;
@@ -544,6 +665,9 @@ export function Canvas(props: CanvasProps) {
             if (cur_path) {
               if (cur_path.checkIsClosed()) {
                 cur_path.setClosed();
+                const clockwise = checkIsClockwise(cur_path.path_points);
+                cur_path.setClockWise(clockwise);
+                // console.log("check is clockwise", clockwise);
               }
             }
           }
@@ -555,9 +679,11 @@ export function Canvas(props: CanvasProps) {
               }
               if (cur_path.checkIsClosed()) {
                 cur_path.setClosed();
+                const clockwise = checkIsClockwise(cur_path.path_points);
+                cur_path.setClockWise(clockwise);
+                // console.log("check is clockwise 2", clockwise);
               }
             }
-
             let v0 = values[0];
             let v1 = values[1];
             let p = {
@@ -588,69 +714,63 @@ export function Canvas(props: CanvasProps) {
             cur_path_point = point;
             const new_path = BezierPath({
               points: [point],
-              fill: payload.fill
-                ? {
-                    color: payload.fill,
-                  }
-                : null,
-              stroke: payload.stroke
-                ? {
-                    color: payload.stroke,
-                    width: payload.strokeWidth || 1,
-                    cap: payload.lineCap,
-                    join: payload.lineJoin,
-                  }
-                : null,
             });
-            paths.push(new_path);
+            pppp.append(new_path);
             if (cur_path) {
-              const cur_size = new_path.size;
-              const prev_size = cur_path.size;
-              console.log("cur size compare with prev_size", cur_size, prev_size);
-              // const start_size = composite_relative_path.size;
-              // new_path.setPrev(composite_relative_path);
-              if (
-                cur_size.x > prev_size.x &&
-                cur_size.y > prev_size.y &&
-                cur_size.x2 < prev_size.x2 &&
-                cur_size.y2 < prev_size.y2
-              ) {
-                // 当前这个，在前面那个的里面
-                if (cur_path.composite === "source-over") {
-                  new_path.setComposite("destination-out");
-                }
-                if (cur_path.composite === "destination-out") {
-                  composite_relative_path = new_path;
-                  new_path.setComposite("source-over");
-                }
-              }
-              // 如果前面那个，在当前这个的里面
-              if (composite_relative_path) {
-                const cur_size = new_path.size;
-                const prev_size = composite_relative_path.size;
-                if (
-                  cur_size.x > prev_size.x &&
-                  cur_size.y > prev_size.y &&
-                  cur_size.x2 < prev_size.x2 &&
-                  cur_size.y2 < prev_size.y2
-                ) {
-                  if (composite_relative_path.composite === "source-over") {
-                    new_path.setComposite("destination-out");
-                  }
-                  if (composite_relative_path.composite === "destination-out") {
-                  }
-                }
-              }
+              // const cur_size = new_path.size;
+              // const prev_size = cur_path.size;
+              // console.log("cur size compare with prev_size", cur_size, prev_size);
+              // if (
+              //   cur_size.x > prev_size.x &&
+              //   cur_size.y > prev_size.y &&
+              //   cur_size.x2 < prev_size.x2 &&
+              //   cur_size.y2 < prev_size.y2
+              // ) {
+              //   // 当前这个，在前面那个的里面
+              //   if (cur_path.composite === "source-over") {
+              //     new_path.setComposite("destination-out");
+              //   }
+              //   if (cur_path.composite === "destination-out") {
+              //     composite_relative_path = new_path;
+              //     new_path.setComposite("source-over");
+              //   }
+              // }
+              // // 如果前面那个，在当前这个的里面
+              // if (composite_relative_path) {
+              //   const cur_size = new_path.size;
+              //   const prev_size = composite_relative_path.size;
+              //   if (
+              //     cur_size.x > prev_size.x &&
+              //     cur_size.y > prev_size.y &&
+              //     cur_size.x2 < prev_size.x2 &&
+              //     cur_size.y2 < prev_size.y2
+              //   ) {
+              //     if (composite_relative_path.composite === "source-over") {
+              //       new_path.setComposite("destination-out");
+              //     }
+              //     if (composite_relative_path.composite === "destination-out") {
+              //     }
+              //   }
+              // }
             }
             if (i === 0) {
               composite_relative_path = new_path;
             }
             cur_path = new_path;
           }
-          if (["Z", "z"].includes(command) && cur_path && start_path_point) {
-            start_path_point.setEnd(true);
-            start_path_point.setClosed();
-            cur_path.setClosed();
+          if (["Z", "z"].includes(command)) {
+            console.log("[BIZ]command is Z", cur_path);
+            if (start_path_point) {
+              start_path_point.setEnd(true);
+              start_path_point.setClosed();
+            }
+            if (cur_path) {
+              cur_path.setClosed();
+              const clockwise = checkIsClockwise(cur_path.path_points);
+              cur_path.setClockWise(clockwise);
+              // console.log("check is clockwise 3", clockwise);
+            }
+            // cur_path.setClosed();
           }
           if (next && cur_path) {
             const [next_command, ...next_args] = next;
@@ -679,11 +799,11 @@ export function Canvas(props: CanvasProps) {
               };
               console.log("[BIZ]canvas / before arc_to_curve", start, arc);
               const pointsArr = arc_to_curve(start, arc);
-              // console.log("after arc_to_curve", start, pointsArr);
+              console.log("after arc_to_curve", start, pointsArr);
               let inner_cur_path_point: PathPoint | null = null;
               for (let k = 0; k < pointsArr.length; k += 1) {
                 const inner_cur = pointsArr[k];
-                console.log("inner_cur", inner_cur);
+                // console.log("inner_cur", inner_cur);
                 const inner_next = pointsArr[k + 1];
                 if (cur_path_point) {
                   cur_path_point.setTo(BezierPoint(inner_cur[1]));
@@ -1002,6 +1122,7 @@ export function Canvas(props: CanvasProps) {
             }
           }
         }
+        paths.push(pppp);
       }
       return {
         paths,
@@ -1019,12 +1140,12 @@ export function Canvas(props: CanvasProps) {
           return;
         }
         const found = checkIsClickPathPoint(pos);
-        // console.log("[BIZ]canvas/index has matched point", found, _cur_path_point, _cur_point);
-        if (found && _cur_path_point && found !== _cur_path_point && _cur_path) {
+        console.log("[BIZ]canvas/index has matched point", found, _cur_path_point, _cur_point);
+        if (found && _cur_path_point && found !== _cur_path_point && _cur_bezier_path) {
           if (found.start) {
             // 点击了开始点，闭合路径
             found.setEnd(true);
-            _cur_path.setClosed();
+            _cur_bezier_path.setClosed();
             _cur_path_point.setClosed();
             _cur_path_point.point.move(found.point);
             _prepare_dragging = true;
@@ -1032,13 +1153,14 @@ export function Canvas(props: CanvasProps) {
           }
           return;
         }
+        console.log("[BIZ]canvas/index is moving for new line", _moving_for_new_line, _cur_path_point);
         if (_moving_for_new_line && _cur_path_point) {
           // 创建点后移动，选择了一个位置，按下，看准备拖动创建曲线，还是松开直接创建直线
           _prepare_dragging = true;
           _cur_point = _cur_path_point.to;
           return;
         }
-        // 画布空白，第一次点击，创建起点
+        // 画布空白，第一次点击，创建起点 @todo 移到 mouseup 中
         _moving_for_new_line = true;
         const start = PathPoint({
           point: BezierPoint({
@@ -1060,20 +1182,22 @@ export function Canvas(props: CanvasProps) {
           to: null,
           mirror: PathPointMirrorTypes.MirrorAngleAndLength,
         });
-        _cur_path = BezierPath({
+        // console.log("create BezierPath");
+        _cur_bezier_path = BezierPath({
           points: [],
           closed: false,
         });
-        _paths.push(_cur_path);
-        _cur_path.onPointCountChange(() => {
+        _cur_path.append(_cur_bezier_path);
+        _bezier_paths.push(_cur_bezier_path);
+        _cur_bezier_path.onPointCountChange(() => {
           updatePoints();
         });
         _prev_path_point = start;
         _cur_path_point = end;
         _prev_point = start.point;
         _cur_point = end.point;
-        _cur_path.appendPoint(start);
-        _cur_path.appendPoint(end);
+        _cur_bezier_path.appendPoint(start);
+        _cur_bezier_path.appendPoint(end);
         return;
       }
       _mx = x;
@@ -1231,7 +1355,7 @@ export function Canvas(props: CanvasProps) {
       _oy = 0;
       // console.log("[BIZ]canvas - handleMouseUp", _pen_editing);
       if (_pen_editing) {
-        const path = _cur_path;
+        const path = _cur_bezier_path;
         if (!path) {
           return;
         }
@@ -1245,28 +1369,33 @@ export function Canvas(props: CanvasProps) {
         }
         // console.log("[BIZ]canvas - handleMouseUp before if (_cur_path_point ", _cur_path_point);
         if (_cur_path_point && _cur_path_point.closed) {
-          console.log("[BIZ]canvas - handleMouseUp close path", _cur_path_point);
+          // console.log("[BIZ]canvas - handleMouseUp close path", _cur_path_point, _cur_path_point.point.pos);
           // console.log("before closed path mouse up");
           // 闭合路径松开
           const start = path.start_point;
           start.setMirror(PathPointMirrorTypes.NoMirror);
           start.setEnd(true);
-          console.log("[BIZ]canvas - before if (_cur_path_point.from", _cur_path_point.from);
+          _cur_path_point.setVirtual(false);
+          // console.log("[BIZ]canvas - before if (_cur_path_point.from", _cur_path_point.from);
           if (_cur_path_point.from) {
             // 因为待会要删掉最后一个坐标点及其控制点，所以这里是 copy
             start.setFrom(_cur_path_point.from, { copy: true });
           }
-          // path.removeLastPoint();
+          // console.log("_prev_path_point", _prev_path_point?.uid, _prev_path_point?.point.pos, _prev_path_point?.to);
+          if (_cur_bezier_path) {
+            _cur_bezier_path.removeLastPoint();
+          }
           _prepare_dragging = false;
           _dragging = false;
           _moving_for_new_line = false;
           _cur_point = null;
           _cur_path_point = null;
+          this.format(_paths);
           bus.emit(Events.Update);
           return;
         }
         // console.log("_prepare_dragging / ", _prepare_dragging, _dragging, _cur_path_point);
-        console.log("[BIZ]canvas - handleMouseUp before if (_dragging ", _dragging);
+        // console.log("[BIZ]canvas - handleMouseUp before if (_dragging ", _dragging);
         if (_dragging) {
           // 确定一个点后生成线条，拖动控制点改变线条曲率，然后松开
           if (!cur.from) {
@@ -1275,6 +1404,9 @@ export function Canvas(props: CanvasProps) {
           _prepare_dragging = false;
           _dragging = false;
           _moving_for_new_line = true;
+          if (_cur_path_point) {
+            _cur_path_point.setVirtual(false);
+          }
           const p = getSymmetricPoint2(cur.point, { x, y }, cur.from, AUTO_CONTROLLER_POINT_LENGTH_RATIO);
           const from_of_new_path_point = BezierPoint({
             x: p.x,
@@ -1315,7 +1447,7 @@ export function Canvas(props: CanvasProps) {
           });
           return;
         }
-        console.log("[BIZ]canvas - handleMouseUp before if (_prepare_dragging ", _prepare_dragging, _dragging);
+        // console.log("[BIZ]canvas - handleMouseUp before if (_prepare_dragging ", _prepare_dragging, _dragging);
         if (_prepare_dragging && !_dragging) {
           // 确定一个点后生成线条，没有拖动控制点改变线条曲率，直接松开。这里直线曲线都可能
           // @todo 如果本来是创建曲线，结果实际上创建了直线，应该移除曲线的控制点，变成真正的直线
@@ -1367,6 +1499,9 @@ export function Canvas(props: CanvasProps) {
     },
     onUpdate(handler: Handler<TheTypesOfEvents[Events.Update]>) {
       return bus.on(Events.Update, handler);
+    },
+    onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
+      return bus.on(Events.Change, handler);
     },
   };
 }
@@ -1424,7 +1559,7 @@ export function CanvasLayer(props: CanvasLayerProps) {
     drawDiamondAtLineEnd(p1: { x: number; y: number }, p2: { x: number; y: number }) {
       console.log("请实现 drawDiamondAtLineEnd 方法");
     },
-    drawPoints() {
+    drawPoints(points: BezierPoint[]) {
       console.log("请实现 drawPoints 方法");
     },
     drawGrid(callback: Function) {
@@ -1490,7 +1625,9 @@ export function CanvasLayer(props: CanvasLayerProps) {
     restore() {
       console.log("请实现 restore 方法");
     },
-    log,
+    log(...args: string[]) {
+      log(...args);
+    },
     stopLog() {
       log = () => {};
     },

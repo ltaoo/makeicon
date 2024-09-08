@@ -197,7 +197,7 @@ export function PathPoint(props: PathPointProps) {
       return _closed;
     },
     setClosed() {
-      console.log("[BIZ]path_point - setClosed");
+      // console.log("[BIZ]path_point - setClosed");
       _closed = true;
     },
     get virtual() {

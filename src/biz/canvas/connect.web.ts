@@ -96,6 +96,18 @@ export function connectLayer(
     const y = point.y;
     ctx.fillText(`${point.uid}|${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
   };
+  layer.drawPoints = (points: BezierPoint[]) => {
+    console.log("layer.drawPoints", points.length);
+    points.forEach((p, i) => {
+      layer.drawCircle(p, 3);
+      // 绘制坐标
+      ctx.fillStyle = "black";
+      ctx.font = "10px Arial";
+      const x = p.x;
+      const y = p.y;
+      ctx.fillText(`(${i})、${x},${y}`, x + 2, y - 2);
+    });
+  };
   layer.drawDiamondAtLineEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
     const size = 3;
     const dx = p2.x - p1.x;
@@ -105,19 +117,14 @@ export function connectLayer(
     const unitY = dy / length;
     const perpX = -unitY;
     const perpY = unitX;
-    // 菱形顶点
     const diamondTopX = p2.x + perpX * size;
     const diamondTopY = p2.y + perpY * size;
-    // 菱形右点
     const diamondRightX = p2.x + unitX * size;
     const diamondRightY = p2.y + unitY * size;
-    // 菱形底点
     const diamondBottomX = p2.x - perpX * size;
     const diamondBottomY = p2.y - perpY * size;
-    // 菱形左点
     const diamondLeftX = p2.x - unitX * size;
     const diamondLeftY = p2.y - unitY * size;
-    // 绘制菱形
     ctx.beginPath();
     ctx.moveTo(diamondTopX, diamondTopY);
     ctx.lineTo(diamondRightX, diamondRightY);

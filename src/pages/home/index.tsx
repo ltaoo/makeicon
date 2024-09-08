@@ -10,6 +10,7 @@ import { DialogCore, InputCore } from "@/domains/ui";
 import { connect, connectLayer } from "@/biz/canvas/connect.web";
 import { Canvas } from "@/biz/canvas";
 import { objectToHTML } from "@/utils";
+import { Copy } from "lucide-solid";
 
 export const HomeIndexPage: ViewComponent = (props) => {
   const { app } = props;
@@ -33,7 +34,14 @@ export const HomeIndexPage: ViewComponent = (props) => {
       }
       const { dimensions, paths } = result;
       $$canvas.setPaths(paths, { transform: true, dimensions });
+      preview();
       $dialog.hide();
+    },
+  });
+  const $codeDialog = new DialogCore({
+    footer: false,
+    onCancel() {
+      setCode("");
     },
   });
   // const d = `M288 373.333333c-82.432 0-149.333333 66.922667-149.333333 149.333334a149.333333 149.333333 0 0 0 149.333333 149.333333c82.496 0 149.333333-66.816 149.333333-149.333333 0-82.410667-66.88-149.333333-149.333333-149.333334z m0 64c47.104 0 85.333333 38.250667 85.333333 85.333334 0 47.146667-38.186667 85.333333-85.333333 85.333333a85.333333 85.333333 0 1 1 0-170.666667zM757.333333 672a128.021333 128.021333 0 1 0 128 128c0-70.656-57.344-128-128-128z m0 64a64.021333 64.021333 0 1 1-64 64c0-35.328 28.672-64 64-64zM757.333333 117.333333a128.021333 128.021333 0 1 0 128 128c0-70.656-57.344-128-128-128z m0 64a64.021333 64.021333 0 1 1-64 64c0-35.328 28.672-64 64-64z`;
@@ -47,73 +55,84 @@ export const HomeIndexPage: ViewComponent = (props) => {
     defaultValue: ``,
   });
 
+  const [state, setState] = createSignal($$canvas.state);
   const [layers, setLayers] = createSignal($$canvas.layers);
-  const [preview, setPreview] = createSignal<{ content: string; text: string; width: string; height: string }[]>([]);
+  const [icons, setIcons] = createSignal<{ content: string; text: string; width: string; height: string }[]>([]);
+  const [code, setCode] = createSignal("");
 
-  onMount(() => {
-    function draw() {
-      const $$layer = $$canvas.layer;
-      if (!$$layer) {
-        return;
+  function preview() {
+    const result = $$canvas.preview();
+    if (result.length === 0) {
+      app.tip({
+        text: ["没有内容"],
+      });
+      return;
+    }
+    setIcons(result);
+  }
+  function draw() {
+    console.log("[PAGE]index/index - draw", $$canvas.paths.length);
+    const $$layer = $$canvas.layer;
+    const $layer = $$canvas.layers[1];
+    if (!$$layer) {
+      return;
+    }
+    $$layer.clear();
+    $layer.clear();
+    $$layer.emptyLogs();
+    // $$layer.resumeLog();
+    if ($$canvas.debug) {
+      const m = $$canvas.getMousePoint();
+      $$layer.setFillStyle("black");
+      $$layer.setFont("10px Arial");
+      $$layer.fillText(m.text, m.x, m.y);
+    }
+    // console.log("[PAGE]before render $$canvas.paths", $$canvas.paths);
+    for (let i = 0; i < $$canvas.paths.length; i += 1) {
+      const $$prev_path = $$canvas.paths[i - 1];
+      const $$path = $$canvas.paths[i];
+      const state = $$path.state;
+      // console.log("before $$path.state.stroke.enabled", state.stroke.enabled);
+      if (state.stroke.enabled) {
+        // 绘制描边
+        // const curves = $$path.buildOutline({ cap: "butt" });
+        // ctx.save();
+        // ctx.beginPath();
+        // for (let i = 0; i < curves.outline.length; i += 1) {
+        //   const curve = curves.outline[i];
+        //   const [start, c1, c2, end] = curve.points;
+        //   const next = curves.outline[i + 1];
+        //   if (i === 0 && start) {
+        //     ctx.moveTo(start.x, start.y);
+        //   }
+        //   (() => {
+        //     if (curve._linear) {
+        //       const last = curve.points[curve.points.length - 1];
+        //       ctx.lineTo(last.x, last.y);
+        //       return;
+        //     }
+        //     if (end) {
+        //       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
+        //       return;
+        //     }
+        //     ctx.quadraticCurveTo(c1.x, c1.y, c2.x, c2.y);
+        //   })();
+        // }
+        // ctx.closePath();
+        // ctx.fillStyle = $$path.state.stroke.color;
+        // ctx.fill();
+        // ctx.strokeStyle = state.stroke.color;
+        // ctx.lineWidth = $$canvas.grid.unit * state.stroke.width;
+        // ctx.lineCap = state.stroke.start_cap;
+        // ctx.lineJoin = state.stroke.join;
+        // ctx.stroke();
+        // ctx.restore();
       }
-      $$layer.clear();
-      $$layer.emptyLogs();
-      $$layer.resumeLog();
-      const ctx = $$layer;
-      if ($$canvas.debug) {
-        const m = $$canvas.getMousePoint();
-        ctx.setFillStyle("black");
-        ctx.setFont("10px Arial");
-        ctx.fillText(m.text, m.x, m.y);
-      }
-      // console.log("[PAGE]before render $$canvas.paths", $$canvas.paths);
-      for (let i = 0; i < $$canvas.paths.length; i += 1) {
-        const logs: string[] = [];
-        function log(...args: string[]) {
-          logs.push(...args);
-        }
-        const $$prev_path = $$canvas.paths[i - 1];
-        const $$path = $$canvas.paths[i];
-        const state = $$path.state;
-        // console.log("before $$path.state.stroke.enabled", state.stroke.enabled);
-        if (state.stroke.enabled) {
-          // 绘制描边
-          // const curves = $$path.buildOutline({ cap: "butt" });
-          // ctx.save();
-          // ctx.beginPath();
-          // for (let i = 0; i < curves.outline.length; i += 1) {
-          //   const curve = curves.outline[i];
-          //   const [start, c1, c2, end] = curve.points;
-          //   const next = curves.outline[i + 1];
-          //   if (i === 0 && start) {
-          //     ctx.moveTo(start.x, start.y);
-          //   }
-          //   (() => {
-          //     if (curve._linear) {
-          //       const last = curve.points[curve.points.length - 1];
-          //       ctx.lineTo(last.x, last.y);
-          //       return;
-          //     }
-          //     if (end) {
-          //       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
-          //       return;
-          //     }
-          //     ctx.quadraticCurveTo(c1.x, c1.y, c2.x, c2.y);
-          //   })();
-          // }
-          // ctx.closePath();
-          // ctx.fillStyle = $$path.state.stroke.color;
-          // ctx.fill();
-          // ctx.strokeStyle = state.stroke.color;
-          // ctx.lineWidth = $$canvas.grid.unit * state.stroke.width;
-          // ctx.lineCap = state.stroke.start_cap;
-          // ctx.lineJoin = state.stroke.join;
-          // ctx.stroke();
-          // ctx.restore();
-        }
-        // 绘制路径
-        const commands = $$path.buildCommands();
-        ctx.save();
+      // 绘制路径
+      for (let j = 0; j < $$path.paths.length; j += 1) {
+        const $sub_path = $$path.paths[j];
+        const commands = $sub_path.buildCommands();
+        $$layer.save();
         for (let i = 0; i < commands.length; i += 1) {
           const prev = commands[i - 1];
           const command = commands[i];
@@ -122,40 +141,47 @@ export const HomeIndexPage: ViewComponent = (props) => {
           if (command.c === "M") {
             const [x, y] = command.a;
             // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
-            ctx.beginPath();
-            ctx.moveTo(x, y);
+            $$layer.beginPath();
+            $$layer.moveTo(x, y);
+            $layer.beginPath();
+            $layer.moveTo(x, y);
           }
           if (command.c === "A") {
             // console.log('A', command);
             const [c1x, c1y, radius, angle1, angle2, counterclockwise] = command.a;
-            ctx.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
+            $$layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
+            $layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
             // if (command.end) {
             //   ctx.moveTo(command.end.x, command.end.y);
             // }
           }
           if (command.c === "C") {
             const [c1x, c1y, c2x, c2y, ex, ey] = command.a;
-            ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+            $$layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+            $layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
             // if (command.p) {
             //   ctx.moveTo(command.p.x, command.p.y);
             // }
           }
           if (command.c === "Q") {
             const [c1x, c1y, ex, ey] = command.a;
-            ctx.quadraticCurveTo(c1x, c1y, ex, ey);
+            $$layer.quadraticCurveTo(c1x, c1y, ex, ey);
+            $layer.quadraticCurveTo(c1x, c1y, ex, ey);
           }
           if (command.c === "L") {
             const [x, y] = command.a;
-            ctx.lineTo(x, y);
+            $$layer.lineTo(x, y);
+            $layer.lineTo(x, y);
           }
           if (command.c === "Z") {
-            ctx.closePath();
+            $$layer.closePath();
+            $layer.closePath();
           }
         }
-        ctx.setStrokeStyle("lightgrey");
-        ctx.setLineWidth(1);
-        ctx.stroke();
-        if (state.fill.enabled && $$path.closed) {
+        $layer.setStrokeStyle("lightgrey");
+        $layer.setLineWidth(1);
+        $layer.stroke();
+        if (state.fill.enabled && $sub_path.closed) {
           // if ($$path.prev) {
           //   const cur_size = $$path.size;
           //   const prev_size = $$path.prev.size;
@@ -173,74 +199,80 @@ export const HomeIndexPage: ViewComponent = (props) => {
           //     ctx.globalCompositeOperation = "destination-out";
           //   }
           // }
-          if ($$path.composite === "destination-out") {
-            ctx.setGlobalCompositeOperation($$path.composite);
+          if ($sub_path.composite === "destination-out") {
+            $$layer.setGlobalCompositeOperation($sub_path.composite);
           }
-          ctx.setFillStyle(state.fill.color);
-          ctx.fill();
+          $$layer.setFillStyle(state.fill.color);
+          $$layer.fill();
           // if ($$path.composite === "destination-out") {
           //   ctx.globalCompositeOperation = "source-out";
           // }
         }
         if (state.stroke.enabled) {
-          ctx.setStrokeStyle(state.stroke.color);
-          ctx.setLineWidth($$canvas.grid.unit * state.stroke.width);
-          ctx.setLineCap(state.stroke.start_cap);
-          ctx.setLineJoin(state.stroke.join);
-          ctx.stroke();
+          $$layer.setStrokeStyle(state.stroke.color);
+          $$layer.setLineWidth($$canvas.grid.unit * state.stroke.width);
+          $$layer.setLineCap(state.stroke.start_cap);
+          $$layer.setLineJoin(state.stroke.join);
+          $$layer.stroke();
         }
-        ctx.restore();
+        $$layer.restore();
         $$layer.stopLog();
         // 绘制锚点
         if ($$canvas.state.cursor) {
-          ctx.save();
-          for (let i = 0; i < $$path.skeleton.length; i += 1) {
-            const point = $$path.skeleton[i];
+          // const $layer = $$canvas.layers[1];
+          $layer.save();
+          for (let k = 0; k < $sub_path.skeleton.length; k += 1) {
+            const point = $sub_path.skeleton[k];
             // console.log("[PAGE]home/index", i, point.start ? "start" : "", point.from, point.to, point.virtual);
             (() => {
               if (point.hidden) {
                 return;
               }
-              ctx.beginPath();
-              ctx.setLineWidth(0.5);
-              ctx.setStrokeStyle("lightgrey");
+              $layer.beginPath();
+              $layer.setLineWidth(0.5);
+              $layer.setStrokeStyle("lightgrey");
               if (point.from) {
-                $$layer.drawLine(point, point.from);
+                $layer.drawLine(point, point.from);
               }
               if (point.to && !point.virtual) {
-                $$layer.drawLine(point, point.to);
+                $layer.drawLine(point, point.to);
               }
-              ctx.setStrokeStyle("black");
+              $layer.setStrokeStyle("black");
               const radius = 3;
-              $$layer.drawCircle(point.point, radius);
+              $layer.drawCircle(point.point, radius);
               if (point.from) {
-                $$layer.drawDiamondAtLineEnd(point, point.from);
+                $layer.drawDiamondAtLineEnd(point, point.from);
               }
               if (point.to && !point.virtual) {
-                $$layer.drawDiamondAtLineEnd(point, point.to);
+                $layer.drawDiamondAtLineEnd(point, point.to);
               }
             })();
           }
-          ctx.restore();
+          $layer.restore();
         }
       }
     }
+  }
 
-    $$canvas.onUpdate(() => {
-      draw();
-    });
-    app.onKeyup(({ code }) => {
-      if (code === "Backspace") {
-        $$canvas.deleteCurPoint();
-      }
-    });
+  $$canvas.onUpdate(() => {
+    draw();
+  });
+  $$canvas.onChange((v) => setState(v));
+  app.onKeyup(({ code }) => {
+    if (code === "Backspace") {
+      $$canvas.deleteCurPoint();
+    }
   });
 
   return (
     <>
       <div class="">
         <div
-          class="__a relative w-screen h-screen"
+          classList={{
+            "__a relative w-screen h-screen": true,
+            "cursor-select": state().cursor === "select",
+            "cursor-pen-edit": state().cursor === "pen",
+          }}
           onAnimationEnd={(event) => {
             connect($$canvas, event.currentTarget);
           }}
@@ -273,11 +305,14 @@ export const HomeIndexPage: ViewComponent = (props) => {
         <div class="absolute right-0 top-0" style={{ "z-index": 9999 }}>
           <div class="p-4">
             <div class="space-y-4">
-              <For each={preview()}>
+              <For each={icons()}>
                 {(svg) => {
                   return (
                     <div class="flex flex-col items-center justify-center p-2 border rounded-md">
-                      <div style={{ width: svg.width, height: svg.height }} innerHTML={svg.content}></div>
+                      <div
+                        style={{ width: svg.width, height: svg.height, "background-color": "#f2f2f2" }}
+                        innerHTML={svg.content}
+                      ></div>
                       <div class="mt-2 text-center">{svg.text}</div>
                     </div>
                   );
@@ -304,7 +339,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
             >
               钢笔
             </div>
-            <div
+            {/* <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
                 const content = $$canvas.buildSVG();
@@ -318,7 +353,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
               }}
             >
               导出SVG
-            </div>
+            </div> */}
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
@@ -330,8 +365,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
-                const result = $$canvas.preview();
-                setPreview(result);
+                preview();
               }}
             >
               预览
@@ -346,7 +380,9 @@ export const HomeIndexPage: ViewComponent = (props) => {
                   });
                   return;
                 }
-                app.copy(content);
+                setCode(content);
+                $codeDialog.show();
+                // app.copy(content);
               }}
             >
               小程序代码
@@ -358,8 +394,8 @@ export const HomeIndexPage: ViewComponent = (props) => {
               }}
             >
               刷新
-            </div>
-            <div
+            </div> */}
+            {/* <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
                 $$canvas.setDebug();
@@ -375,20 +411,38 @@ export const HomeIndexPage: ViewComponent = (props) => {
             >
               隐藏控制点
             </div> */}
-            <div
+            {/* <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
                 $$canvas.log();
               }}
             >
               打印日志
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
       <Dialog store={$dialog}>
         <div class="w-[520px]">
           <Textarea store={$input} />
+        </div>
+      </Dialog>
+      <Dialog store={$codeDialog}>
+        <div class="w-[520px]">
+          <div class="max-h-[480px] overflow-y-auto whitespace-wrap">
+            <pre>{code()}</pre>
+          </div>
+          <div class="mt-4">
+            <Copy
+              class="w-6 h-6 cursor-pointer"
+              onClick={() => {
+                app.copy(code());
+                app.tip({
+                  text: ["复制成功"],
+                });
+              }}
+            />
+          </div>
         </div>
       </Dialog>
     </>
