@@ -68,6 +68,8 @@ export function PathPoint(props: PathPointProps) {
   let _start = start;
   let _end = end;
   let _closed = false;
+  // const bus = base();
+  let _uid = bus.uid();
 
   const _state = {
     from: _from,
@@ -112,6 +114,9 @@ export function PathPoint(props: PathPointProps) {
 
   return {
     SymbolTag: "PathPoint" as const,
+    get uid() {
+      return _uid;
+    },
     get x() {
       return _point.x;
     },
@@ -153,7 +158,13 @@ export function PathPoint(props: PathPointProps) {
       }
       bus.emit(Events.ToOrFromChange);
     },
-    setFrom(point: BezierPoint, extra: Partial<{ copy: boolean }> = {}) {
+    setFrom(
+      point: BezierPoint,
+      extra: Partial<{
+        // 复制一个新的点，而不是使用传入的引用
+        copy: boolean;
+      }> = {}
+    ) {
       _from = point;
       if (extra.copy) {
         _from = BezierPoint({
@@ -186,6 +197,7 @@ export function PathPoint(props: PathPointProps) {
       return _closed;
     },
     setClosed() {
+      console.log("[BIZ]path_point - setClosed");
       _closed = true;
     },
     get virtual() {
@@ -231,9 +243,7 @@ export function PathPoint(props: PathPointProps) {
         return;
       }
     },
-    get state() {
-      return _state;
-    },
+    state: _state,
     deletePoint(point: BezierPoint) {
       if (_from === point) {
         _from = null;

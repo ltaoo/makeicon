@@ -1,18 +1,65 @@
 import { BezierPoint } from "@/biz/bezier_point";
+import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/bezier_path";
 
-import { Canvas } from "./index";
+import { Canvas, CanvasLayer } from "./index";
 
-export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
+export function connect(store: Canvas, $canvas: HTMLDivElement) {
+  if (store.mounted) {
+    return;
+  }
   const dpr = window.devicePixelRatio || 1;
   // $canvas.width = width * dpr;
   // $canvas.height = height * dpr;
-  store.drawLine = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
+
+  const { innerWidth, innerHeight } = window;
+  const width = innerWidth;
+  const height = innerHeight;
+  // const width = innerWidth * dpr;
+  // const height = innerHeight * dpr;
+  store.setSize({
+    width,
+    height,
+  });
+  store.setDPR(dpr);
+  // $canvas.width = width;
+  // $canvas.height = height;
+  // $canvas.style.width = `${innerWidth}px`;
+  // $canvas.style.height = `${innerHeight}px`;
+  // ctx.scale(dpr, dpr);
+  $canvas.addEventListener("mousedown", (evt) => {
+    store.handleMouseDown({
+      x: evt.offsetX,
+      y: evt.offsetY,
+    });
+  });
+  $canvas.addEventListener("mousemove", (evt) => {
+    store.handleMouseMove({ x: evt.offsetX, y: evt.offsetY });
+  });
+  console.log('before $canvas.addEventListener("mouseup');
+  $canvas.addEventListener("mouseup", (evt) => {
+    store.handleMouseUp({ x: evt.offsetX, y: evt.offsetY });
+  });
+
+  store.setMounted();
+}
+
+export function connectLayer(
+  layer: CanvasLayer,
+  canvas: Canvas,
+  $canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D
+) {
+  const log = layer.log;
+  if (layer.mounted) {
+    return;
+  }
+  layer.drawLine = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.closePath();
     ctx.stroke();
   };
-  store.drawCurve = (curve: { points: { x: number; y: number }[] }) => {
+  layer.drawCurve = (curve: { points: { x: number; y: number }[] }) => {
     ctx.beginPath();
     const ox = 0;
     const oy = 0;
@@ -27,7 +74,7 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.closePath();
     ctx.stroke();
   };
-  store.drawCircle = (point: { x: number; y: number }, radius: number) => {
+  layer.drawCircle = (point: { x: number; y: number }, radius: number) => {
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
     ctx.closePath();
@@ -42,14 +89,14 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     // // @ts-ignore
     // ctx.fillText(`${point._uid}、${x},${y}`, x + 2, y - 2);
   };
-  store.drawLabel = (point: BezierPoint) => {
+  layer.drawLabel = (point: BezierPoint) => {
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
     const x = point.x;
     const y = point.y;
-    ctx.fillText(`${point.uid}|${x - store.grid.x},${y - store.grid.y}`, x + 2, y - 2);
+    ctx.fillText(`${point.uid}|${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
   };
-  store.drawDiamondAtLineEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
+  layer.drawDiamondAtLineEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
     const size = 3;
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
@@ -82,16 +129,16 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.fillStyle = "white";
     ctx.fill();
   };
-  store.drawGrid = () => {
-    const { width, height } = store.size;
-    const grid = store.grid;
+  layer.drawGrid = (finish: Function) => {
+    const { width, height } = canvas.size;
+    const grid = canvas.grid;
     const unit = grid.unit;
     const start = {
       x: width / 2 - grid.width / 2,
       y: height / 2 - grid.height / 2,
     };
     // console.log("draw grid", width, height, start, grid.height);
-    store.setGrid(start);
+    canvas.setGrid(start);
     ctx.save();
     ctx.beginPath();
     ctx.lineWidth = grid.lineWidth;
@@ -117,40 +164,90 @@ export function connect(store: Canvas, $canvas: HTMLCanvasElement, ctx: CanvasRe
     ctx.strokeStyle = grid.color;
     ctx.stroke();
     ctx.restore();
+    if (finish) {
+      finish();
+    }
   };
-  store.clear = () => {
+  layer.clear = () => {
     const { width, height } = $canvas;
     // 清空画布
     ctx.clearRect(0, 0, width, height);
   };
-  const { innerWidth, innerHeight } = window;
-  const width = innerWidth;
-  const height = innerHeight;
-  // const width = innerWidth * dpr;
-  // const height = innerHeight * dpr;
-  store.setSize({
-    width,
-    height,
-  });
-  store.setDPR(dpr);
-  $canvas.width = width;
-  $canvas.height = height;
-  // $canvas.style.width = `${innerWidth}px`;
-  // $canvas.style.height = `${innerHeight}px`;
-  // ctx.scale(dpr, dpr);
-  $canvas.addEventListener("mousedown", (evt) => {
-    store.handleMouseDown({
-      x: evt.offsetX,
-      y: evt.offsetY,
-    });
-  });
-  $canvas.addEventListener("mousemove", (evt) => {
-    store.handleMouseMove({ x: evt.offsetX, y: evt.offsetY });
-  });
-  $canvas.addEventListener("mouseup", (evt) => {
-    store.handleMouseUp({ x: evt.offsetX, y: evt.offsetY });
-  });
-  $canvas.addEventListener("mouseout", (evt) => {
-    store.handleMouseOut();
-  });
+  layer.beginPath = () => {
+    log(`ctx.beginPath();`);
+    ctx.beginPath();
+  };
+  layer.closePath = () => {
+    log(`ctx.closePath();`);
+    ctx.closePath();
+  };
+  layer.moveTo = (x: number, y: number) => {
+    log(`ctx.moveTo(${x},${y});`);
+    ctx.moveTo(x, y);
+  };
+  layer.arc = (
+    x: number,
+    y: number,
+    radius: number,
+    startAngle: number,
+    endAngle: number,
+    counterclockwise?: boolean
+  ) => {
+    log(`ctx.arc(${x}, ${y}, ${radius}, ${startAngle}, ${endAngle}, ${Boolean(counterclockwise)});`);
+  };
+  layer.bezierCurveTo = (cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number) => {
+    log(`ctx.bezierCurveTo(${cp1x}, ${cp1y}, ${cp2x}, ${cp2y}, ${x}, ${y});`);
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
+  };
+  layer.quadraticCurveTo = (cpx: number, cpy: number, x: number, y: number) => {
+    log(`ctx.quadraticCurveTo(${cpx}, ${cpy}, ${x}, ${y});`);
+    ctx.quadraticCurveTo(cpx, cpy, x, y);
+  };
+  layer.lineTo = (x: number, y: number) => {
+    log(`ctx.lineTo(${x}, ${y});`);
+    ctx.lineTo(x, y);
+  };
+  layer.setStrokeStyle = (v: string) => {
+    log(`ctx.strokeStyle = "${v}";`);
+    ctx.strokeStyle = v;
+  };
+  layer.setLineWidth = (v: number) => {
+    log(`ctx.lineWidth = ${v};`);
+    ctx.lineWidth = v;
+  };
+  layer.setLineCap = (v: LineCapType) => {
+    log(`ctx.lineCap = "${v}";`);
+    ctx.lineCap = v;
+  };
+  layer.setLineJoin = (v: LineJoinType) => {
+    log(`ctx.lineJoin = "${v}";`);
+    ctx.lineJoin = v;
+  };
+  layer.stroke = () => {
+    log(`ctx.stroke();`);
+    ctx.stroke();
+  };
+  layer.setGlobalCompositeOperation = (v: PathCompositeOperation) => {
+    log(`ctx.globalCompositeOperation = "${v}";`);
+    ctx.globalCompositeOperation = v;
+  };
+  layer.setFillStyle = (v: string) => {
+    log(`ctx.fillStyle = "${v}";`);
+    ctx.fillStyle = v;
+  };
+  layer.fill = () => {
+    log(`ctx.fill();`);
+    ctx.fill();
+  };
+  layer.save = () => {
+    ctx.save();
+  };
+  layer.restore = () => {
+    ctx.restore();
+  };
+
+  $canvas.width = canvas.size.width;
+  $canvas.height = canvas.size.height;
+
+  layer.setMounted();
 }

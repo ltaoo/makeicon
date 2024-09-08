@@ -515,6 +515,9 @@ function arcToCanvasArc(
       return { start: startAngle, end: endAngle, sweep: 1 };
     }
     if (t1 === 1 && t2 === 0) {
+      if (is_reverse && endAngle < 0) {
+        return { start: startAngle, end: endAngle, sweep: 0 };
+      }
       return { start: (360 * Math.PI) / 180 + startAngle, end: endAngle, sweep: 0 };
     }
     if (t1 === 1 && t2 === 1) {

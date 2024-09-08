@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+.pointer-events-none {
+  pointer-events: none;
+}
 
 .__a {
   animation: __a 0.1s;

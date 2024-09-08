@@ -2,19 +2,17 @@
  * @file 首页
  * @todo 支持 垫底图 来描图标，手动对一些使用弧线的图标进行转化
  */
-import { onMount } from "solid-js";
+import { createSignal, For, onMount } from "solid-js";
 
 import { ViewComponent } from "@/store/types";
 import { Dialog, Textarea } from "@/components/ui";
 import { DialogCore, InputCore } from "@/domains/ui";
-import { connect } from "@/biz/canvas/connect.web";
+import { connect, connectLayer } from "@/biz/canvas/connect.web";
 import { Canvas } from "@/biz/canvas";
+import { objectToHTML } from "@/utils";
 
 export const HomeIndexPage: ViewComponent = (props) => {
   const { app } = props;
-
-  let canvas: HTMLCanvasElement | undefined;
-  let p1: HTMLCanvasElement | undefined;
 
   const $$canvas = Canvas({ paths: [] });
   const $dialog = new DialogCore({
@@ -49,13 +47,23 @@ export const HomeIndexPage: ViewComponent = (props) => {
     defaultValue: ``,
   });
 
+  const [layers, setLayers] = createSignal($$canvas.layers);
+  const [preview, setPreview] = createSignal<{ content: string; text: string; width: string; height: string }[]>([]);
+
   onMount(() => {
-    function draw(ctx: CanvasRenderingContext2D) {
-      $$canvas.clear();
+    function draw() {
+      const $$layer = $$canvas.layer;
+      if (!$$layer) {
+        return;
+      }
+      $$layer.clear();
+      $$layer.emptyLogs();
+      $$layer.resumeLog();
+      const ctx = $$layer;
       if ($$canvas.debug) {
         const m = $$canvas.getMousePoint();
-        ctx.fillStyle = "black";
-        ctx.font = "10px Arial";
+        ctx.setFillStyle("black");
+        ctx.setFont("10px Arial");
         ctx.fillText(m.text, m.x, m.y);
       }
       // console.log("[PAGE]before render $$canvas.paths", $$canvas.paths);
@@ -114,50 +122,38 @@ export const HomeIndexPage: ViewComponent = (props) => {
           if (command.c === "M") {
             const [x, y] = command.a;
             // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
-            log(`ctx.beginPath();`);
             ctx.beginPath();
-            log(`ctx.moveTo(${x},${y});`);
             ctx.moveTo(x, y);
           }
           if (command.c === "A") {
             // console.log('A', command);
             const [c1x, c1y, radius, angle1, angle2, counterclockwise] = command.a;
-            log(`ctx.arc(${c1x}, ${c1y}, ${radius}, ${angle1}, ${angle2}, ${Boolean(counterclockwise)});`);
             ctx.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
             // if (command.end) {
-            //   log(`ctx.moveTo(${command.end.x}, ${command.end.y});`);
             //   ctx.moveTo(command.end.x, command.end.y);
             // }
           }
           if (command.c === "C") {
             const [c1x, c1y, c2x, c2y, ex, ey] = command.a;
-            log(`ctx.bezierCurveTo(${c1x}, ${c1y}, ${c2x}, ${c2y}, ${ex}, ${ey});`);
             ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
             // if (command.p) {
-            //   log(`ctx.moveTo(${command.p.x}, ${command.p.y});`);
             //   ctx.moveTo(command.p.x, command.p.y);
             // }
           }
           if (command.c === "Q") {
             const [c1x, c1y, ex, ey] = command.a;
-            log(`ctx.quadraticCurveTo(${c1x}, ${c1y}, ${ex}, ${ey});`);
             ctx.quadraticCurveTo(c1x, c1y, ex, ey);
           }
           if (command.c === "L") {
             const [x, y] = command.a;
-            log(`ctx.lineTo(${x}, ${y});`);
             ctx.lineTo(x, y);
           }
           if (command.c === "Z") {
-            log(`ctx.closePath();`);
             ctx.closePath();
           }
         }
-        log(`ctx.strokeStyle = "lightgrey";`);
-        ctx.strokeStyle = "lightgrey";
-        log(`ctx.lineWidth = 1;`);
-        ctx.lineWidth = 1;
-        log(`ctx.stroke();`);
+        ctx.setStrokeStyle("lightgrey");
+        ctx.setLineWidth(1);
         ctx.stroke();
         if (state.fill.enabled && $$path.closed) {
           // if ($$path.prev) {
@@ -178,33 +174,23 @@ export const HomeIndexPage: ViewComponent = (props) => {
           //   }
           // }
           if ($$path.composite === "destination-out") {
-            log(`ctx.globalCompositeOperation = "${$$path.composite}";`);
-            ctx.globalCompositeOperation = $$path.composite;
+            ctx.setGlobalCompositeOperation($$path.composite);
           }
-          log(`ctx.fillStyle = "${state.fill.color}";`);
-          ctx.fillStyle = state.fill.color;
-          log(`ctx.fill();`);
+          ctx.setFillStyle(state.fill.color);
           ctx.fill();
           // if ($$path.composite === "destination-out") {
-          //   log(`ctx.globalCompositeOperation = "source-out";`);
           //   ctx.globalCompositeOperation = "source-out";
           // }
         }
         if (state.stroke.enabled) {
-          log(`ctx.strokeStyle = "${state.stroke.color}";`);
-          ctx.strokeStyle = state.stroke.color;
-          log(`ctx.lineWidth = ${$$canvas.grid.unit * state.stroke.width};`);
-          ctx.lineWidth = $$canvas.grid.unit * state.stroke.width;
-          log(`ctx.lineCap = "${state.stroke.start_cap}";`);
-          ctx.lineCap = state.stroke.start_cap;
-          log(`ctx.lineJoin = "${state.stroke.join}";`);
-          ctx.lineJoin = state.stroke.join;
-          log(`ctx.stroke();`);
+          ctx.setStrokeStyle(state.stroke.color);
+          ctx.setLineWidth($$canvas.grid.unit * state.stroke.width);
+          ctx.setLineCap(state.stroke.start_cap);
+          ctx.setLineJoin(state.stroke.join);
           ctx.stroke();
         }
-        console.log(logs.join("\n"));
         ctx.restore();
-
+        $$layer.stopLog();
         // 绘制锚点
         if ($$canvas.state.cursor) {
           ctx.save();
@@ -216,65 +202,91 @@ export const HomeIndexPage: ViewComponent = (props) => {
                 return;
               }
               ctx.beginPath();
-              ctx.lineWidth = 0.5;
-              ctx.strokeStyle = "lightgrey";
+              ctx.setLineWidth(0.5);
+              ctx.setStrokeStyle("lightgrey");
               if (point.from) {
-                $$canvas.drawLine(point, point.from);
+                $$layer.drawLine(point, point.from);
               }
               if (point.to && !point.virtual) {
-                $$canvas.drawLine(point, point.to);
+                $$layer.drawLine(point, point.to);
               }
-              ctx.strokeStyle = "black";
+              ctx.setStrokeStyle("black");
               const radius = 3;
-              $$canvas.drawCircle(point.point, radius);
+              $$layer.drawCircle(point.point, radius);
               if (point.from) {
-                $$canvas.drawDiamondAtLineEnd(point, point.from);
+                $$layer.drawDiamondAtLineEnd(point, point.from);
               }
               if (point.to && !point.virtual) {
-                $$canvas.drawDiamondAtLineEnd(point, point.to);
+                $$layer.drawDiamondAtLineEnd(point, point.to);
               }
             })();
           }
           ctx.restore();
         }
       }
-      $$canvas.drawGrid();
-      // c1.scale(0.12, 0.12);
-      // c1.clearRect(0, 0, 48, 48);
-      // const grid = $$canvas.grid;
-      // c1.drawImage(canvas, grid.x, grid.y, grid.width, grid.height, 0, 0, 48, 48);
     }
 
-    const $canvas = canvas;
-    if (!$canvas) {
-      return;
-    }
-    const ctx = $canvas.getContext("2d");
-    if (!ctx) {
-      return;
-    }
-    connect($$canvas, $canvas, ctx);
     $$canvas.onUpdate(() => {
-      draw(ctx);
+      draw();
     });
     app.onKeyup(({ code }) => {
       if (code === "Backspace") {
         $$canvas.deleteCurPoint();
       }
     });
-    draw(ctx);
   });
 
   return (
     <>
-      <div class="relative">
-        <canvas ref={canvas} width="100%" height="100%" />
-        <div class="absolute right-0 top-0">
+      <div class="">
+        <div
+          class="__a relative w-screen h-screen"
+          onAnimationEnd={(event) => {
+            connect($$canvas, event.currentTarget);
+          }}
+        >
+          <For each={layers()}>
+            {(layer) => {
+              return (
+                <canvas
+                  classList={{
+                    "__a absolute inset-0 w-screen h-screen": true,
+                    "pointer-events-none": layer.disabled,
+                  }}
+                  style={{ "z-index": layer.zIndex }}
+                  onAnimationEnd={(event) => {
+                    const $canvas = event.currentTarget as HTMLCanvasElement;
+                    const ctx = $canvas.getContext("2d");
+                    if (!ctx) {
+                      return;
+                    }
+                    connectLayer(layer, $$canvas, $canvas, ctx);
+                    // setTimeout(() => {
+                    //   console.log(ctx);
+                    // }, 3000);
+                  }}
+                />
+              );
+            }}
+          </For>
+        </div>
+        <div class="absolute right-0 top-0" style={{ "z-index": 9999 }}>
           <div class="p-4">
-            <canvas ref={p1} width="48" height="48" />
+            <div class="space-y-4">
+              <For each={preview()}>
+                {(svg) => {
+                  return (
+                    <div class="flex flex-col items-center justify-center p-2 border rounded-md">
+                      <div style={{ width: svg.width, height: svg.height }} innerHTML={svg.content}></div>
+                      <div class="mt-2 text-center">{svg.text}</div>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
           </div>
         </div>
-        <div class="absolute left-0 bottom-0 w-full">
+        <div class="absolute left-0 bottom-0 w-full" style={{ "z-index": 9999 }}>
           <div class="flex items-center p-4 space-x-2">
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
@@ -295,8 +307,13 @@ export const HomeIndexPage: ViewComponent = (props) => {
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
-                const content = $$canvas.exportSVG({ cap: "none" });
-                console.log(content);
+                const content = $$canvas.buildSVG();
+                if (!content) {
+                  app.tip({
+                    text: ["没有内容"],
+                  });
+                  return;
+                }
                 app.copy(content);
               }}
             >
@@ -313,8 +330,22 @@ export const HomeIndexPage: ViewComponent = (props) => {
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
-                const content = $$canvas.exportWeappCode();
-                console.log(content);
+                const result = $$canvas.preview();
+                setPreview(result);
+              }}
+            >
+              预览
+            </div>
+            <div
+              class="inline-block px-4 border text-sm bg-white cursor-pointer"
+              onClick={() => {
+                const content = $$canvas.buildWeappCode();
+                if (!content) {
+                  app.tip({
+                    text: ["没有内容"],
+                  });
+                  return;
+                }
                 app.copy(content);
               }}
             >
@@ -344,6 +375,14 @@ export const HomeIndexPage: ViewComponent = (props) => {
             >
               隐藏控制点
             </div> */}
+            <div
+              class="inline-block px-4 border text-sm bg-white cursor-pointer"
+              onClick={() => {
+                $$canvas.log();
+              }}
+            >
+              打印日志
+            </div>
           </div>
         </div>
       </div>

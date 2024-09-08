@@ -187,3 +187,28 @@ export const video_file_type_regexp =
 export function is_video_file(filename: string) {
   return video_file_type_regexp.test(filename);
 }
+
+export function objectToHTML(obj: JSONObject) {
+  // 如果对象没有 tag 属性，返回空字符串
+  if (!obj.tag) {
+    return "";
+  }
+  // 创建开始标签
+  let html = `<${obj.tag}`;
+  // 添加属性
+  for (const [key, value] of Object.entries(obj)) {
+    if (key !== "tag" && key !== "children") {
+      html += ` ${key}="${value}"`;
+    }
+  }
+  html += ">";
+  // 处理子元素
+  if (Array.isArray(obj.children)) {
+    for (const child of obj.children) {
+      html += objectToHTML(child as JSONObject);
+    }
+  }
+  // 添加结束标签
+  html += `</${obj.tag}>`;
+  return html;
+}

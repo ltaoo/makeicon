@@ -10,17 +10,14 @@ import {
   distanceOfPoints,
   arc_to_curve,
 } from "@/biz/path_point/utils";
-import { BezierPath } from "@/biz/bezier_path";
+import { BezierPath, LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/bezier_path";
 import { BezierPoint } from "@/biz/bezier_point";
 import { PathParser } from "@/biz/svg/path-parser";
+import { objectToHTML } from "@/utils";
 
 const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
 const debug = false;
 
-enum Events {
-  Update,
-  Change,
-}
 type CanvasProps = {
   paths: BezierPath[];
 };
@@ -30,6 +27,24 @@ export function Canvas(props: CanvasProps) {
   let _paths = paths;
   let _points: BezierPoint[] = [];
   let _path_points: PathPoint[] = [];
+  let _layers: CanvasLayer[] = [
+    CanvasLayer({
+      index: 1,
+      zIndex: 999,
+      disabled: true,
+      onMounted(layer) {
+        layer.drawGrid(() => {
+          console.log("The Grid has Draw");
+        });
+      },
+    }),
+    CanvasLayer({
+      index: 2,
+      zIndex: 99,
+    }),
+  ];
+  let _mounted = false;
+  let _cur_layer = _layers[_layers.length - 1];
   /** 按下时的位置 */
   let _mx = 0;
   let _my = 0;
@@ -80,7 +95,7 @@ export function Canvas(props: CanvasProps) {
   let _events: (() => void)[] = [];
   let _debug = false;
 
-  let _state = {
+  const _state = {
     get cursor() {
       return _cursor_editing;
     },
@@ -88,6 +103,11 @@ export function Canvas(props: CanvasProps) {
       return _pen_editing;
     },
   };
+
+  enum Events {
+    Update,
+    Change,
+  }
   type TheTypesOfEvents = {
     [Events.Update]: void;
     [Events.Change]: typeof _state;
@@ -141,38 +161,31 @@ export function Canvas(props: CanvasProps) {
 
   return {
     SymbolTag: "Canvas" as const,
-    drawLine(p1: { x: number; y: number }, p2: { x: number; y: number }) {
-      console.log("请实现 drawLine 方法");
+    state: _state,
+    get layers() {
+      return _layers;
     },
-    drawCurve(curve: { points: { x: number; y: number }[] }) {
-      console.log("请实现 drawCurve 方法");
+    createLayer() {},
+    appendLayer(layer: CanvasLayer) {
+      if (_layers.includes(layer)) {
+        return;
+      }
+      _layers.push(layer);
     },
-    drawCircle(point: { x: number; y: number }, radius: number) {
-      console.log("请实现 drawCircle 方法");
-    },
-    drawLabel(point: { x: number; y: number }) {
-      console.log("请实现 drawLabel 方法");
-    },
-    drawDiamondAtLineEnd(p1: { x: number; y: number }, p2: { x: number; y: number }) {
-      console.log("请实现 drawDiamondAtLineEnd 方法");
-    },
-    drawPoints() {
-      console.log("请实现 drawPoints 方法");
-    },
-    drawGrid() {
-      console.log("请实现 drawGrid 方法");
-    },
-    clear() {
-      console.log("请实现 clear 方法");
-    },
-    get state() {
-      return _state;
+    get layer() {
+      return _cur_layer;
     },
     get size() {
       return _size;
     },
     setSize(size: { width: number; height: number }) {
       Object.assign(_size, size);
+    },
+    get mounted() {
+      return _mounted;
+    },
+    setMounted() {
+      _mounted = true;
     },
     setDPR(v: number) {
       _dpr = v;
@@ -268,11 +281,8 @@ export function Canvas(props: CanvasProps) {
     },
     selectCursor() {
       // _cursor_editing = 1;
-      if (_pen_editing) {
-        const path = _cur_path;
-        if (path) {
-          path.removeLastPoint();
-        }
+      if (_pen_editing && _cur_path) {
+        _cur_path.removeLastVirtualPoint();
       }
       _pen_editing = 0;
       _cur_path_point = null;
@@ -281,11 +291,8 @@ export function Canvas(props: CanvasProps) {
       bus.emit(Events.Update);
       bus.emit(Events.Change, { ..._state });
     },
-    exportSVG(options: Partial<{ cap: "round" | "none" }> = {}) {
-      const scale = 1;
-      let svg = `<svg width="${_grid.width * scale}" height="${
-        _grid.height * scale
-      }" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" class="icon" version="1.1"><g class="layer">`;
+    buildSVGPath(options: Partial<{ scale: number }> = {}) {
+      const { scale } = options;
       let d = "";
       for (let i = 0; i < _paths.length; i += 1) {
         const path = _paths[i];
@@ -360,17 +367,87 @@ export function Canvas(props: CanvasProps) {
           })();
         }
       }
-      svg += `<path d="${d}" fill="#111111" id="svg_1" />`;
+      return d;
+    },
+    buildSVGJSON(options: Partial<{ cap: LineCapType; join: LineJoinType; width: number; height: number }> = {}) {
+      const scale = 1;
+      const box = {
+        width: _grid.width * scale,
+        height: _grid.height * scale,
+      };
+      const size = {
+        width: options.width || box.width,
+        height: options.height || box.height,
+      };
+      const d = this.buildSVGPath({ scale });
+      if (d === "d") {
+        return null;
+      }
+      const path: Record<string, string> = {
+        id: "svg_1",
+        tag: "path",
+        d,
+      };
+      const svg = {
+        tag: "svg",
+        viewBox: `0 0 ${box.width} ${box.height}`,
+        width: size.width,
+        height: size.height,
+        xmlns: "http://www.w3.org/2000/svg",
+        "xmlns:svg": "http://www.w3.org/2000/svg",
+        class: "icon",
+        version: "1.1",
+        children: [
+          {
+            tag: "g",
+            class: "layer",
+            children: [path],
+          },
+        ],
+      };
+      path.fill = "#111111";
+      // const svg = `<svg viewBox="0 0 ${box.width} ${box.height}" width="${size.width}" height="${size.height}" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" class="icon" version="1.1"><g class="layer">`;
+      // svg += `<path d="${d}" fill="#111111" id="svg_1" />`;
       // if (path.state.stroke.enabled) {
       // }
-      svg += "</g></svg>";
       return svg;
     },
-    exportWeappCode() {
-      const svg = this.exportSVG();
-      const url = toBase64(svg, { doubleQuote: true });
+    buildSVG(options: Partial<{ cap: LineCapType; join: LineJoinType; width: number; height: number }> = {}) {
+      const r = this.buildSVGJSON(options);
+      if (!r) {
+        return null;
+      }
+      return objectToHTML(r);
+    },
+    buildWeappCode() {
+      const svg = this.buildSVGJSON();
+      if (!svg) {
+        return null;
+      }
+      const str = objectToHTML(svg);
+      const url = toBase64(str, { doubleQuote: true });
       const template = `.icon-example {\n-webkit-mask:url('${url}') no-repeat 50% 50%;\n-webkit-mask-size: cover;\n}`;
       return template;
+    },
+    preview() {
+      const svg = this.buildSVGJSON();
+      if (!svg) {
+        return [];
+      }
+      svg.width = 64;
+      svg.height = 64;
+      const str1 = objectToHTML(svg);
+      svg.width = 32;
+      svg.height = 32;
+      const str2 = objectToHTML(svg);
+      svg.width = 24;
+      svg.height = 24;
+      const str3 = objectToHTML(svg);
+      return [
+        { content: str3, text: "24x24", width: "24px", height: "24px" },
+        { content: str2, text: "32x32", width: "32px", height: "32px" },
+        { content: str1, text: "64x64", width: "64px", height: "64px" },
+      ];
     },
     getMousePoint() {
       return {
@@ -610,6 +687,7 @@ export function Canvas(props: CanvasProps) {
                 const inner_next = pointsArr[k + 1];
                 if (cur_path_point) {
                   cur_path_point.setTo(BezierPoint(inner_cur[1]));
+                  cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
                   // if (cur_path_point.start) {
                   // }
                   // if (cur_path_point.from) {
@@ -618,11 +696,13 @@ export function Canvas(props: CanvasProps) {
                 }
                 if (inner_cur_path_point && inner_cur_path_point.from) {
                   inner_cur_path_point.setTo(BezierPoint(inner_cur[1]));
+                  inner_cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
                 }
                 const new_cur_path_point = PathPoint({
                   point: BezierPoint(inner_cur[3]),
                   from: BezierPoint(inner_cur[2]),
                   to: inner_next ? BezierPoint(inner_next[1]) : null,
+                  mirror: inner_next ? PathPointMirrorTypes.MirrorAngleAndLength : null,
                   virtual: false,
                 });
                 cur_path_point = new_cur_path_point;
@@ -939,7 +1019,7 @@ export function Canvas(props: CanvasProps) {
           return;
         }
         const found = checkIsClickPathPoint(pos);
-        console.log("[BIZ]canvas/index has matched point", found, _cur_path_point, _cur_point);
+        // console.log("[BIZ]canvas/index has matched point", found, _cur_path_point, _cur_point);
         if (found && _cur_path_point && found !== _cur_path_point && _cur_path) {
           if (found.start) {
             // 点击了开始点，闭合路径
@@ -999,7 +1079,7 @@ export function Canvas(props: CanvasProps) {
       _mx = x;
       _my = y;
       const found = checkIsClickPoint(pos);
-      console.log("[BIZ]canvas/index - after checkIsClickPoint(pos)", found);
+      // console.log("[BIZ]canvas/index - after checkIsClickPoint(pos)", found);
       if (found) {
         _prepare_dragging = true;
         _cur_point = found;
@@ -1149,6 +1229,7 @@ export function Canvas(props: CanvasProps) {
       _cy = 0;
       _ox = 0;
       _oy = 0;
+      // console.log("[BIZ]canvas - handleMouseUp", _pen_editing);
       if (_pen_editing) {
         const path = _cur_path;
         if (!path) {
@@ -1162,29 +1243,30 @@ export function Canvas(props: CanvasProps) {
         if (!cur) {
           return;
         }
+        // console.log("[BIZ]canvas - handleMouseUp before if (_cur_path_point ", _cur_path_point);
         if (_cur_path_point && _cur_path_point.closed) {
+          console.log("[BIZ]canvas - handleMouseUp close path", _cur_path_point);
           // console.log("before closed path mouse up");
           // 闭合路径松开
           const start = path.start_point;
           start.setMirror(PathPointMirrorTypes.NoMirror);
           start.setEnd(true);
-          // console.log("set from for start point", _cur_path_point.from);
+          console.log("[BIZ]canvas - before if (_cur_path_point.from", _cur_path_point.from);
           if (_cur_path_point.from) {
+            // 因为待会要删掉最后一个坐标点及其控制点，所以这里是 copy
             start.setFrom(_cur_path_point.from, { copy: true });
           }
-          path.removeLastPoint();
+          // path.removeLastPoint();
           _prepare_dragging = false;
           _dragging = false;
           _moving_for_new_line = false;
           _cur_point = null;
           _cur_path_point = null;
-          // _pen_editing = 0;
-          // if (_dragging) {
-          // }
           bus.emit(Events.Update);
           return;
         }
         // console.log("_prepare_dragging / ", _prepare_dragging, _dragging, _cur_path_point);
+        console.log("[BIZ]canvas - handleMouseUp before if (_dragging ", _dragging);
         if (_dragging) {
           // 确定一个点后生成线条，拖动控制点改变线条曲率，然后松开
           if (!cur.from) {
@@ -1233,10 +1315,11 @@ export function Canvas(props: CanvasProps) {
           });
           return;
         }
+        console.log("[BIZ]canvas - handleMouseUp before if (_prepare_dragging ", _prepare_dragging, _dragging);
         if (_prepare_dragging && !_dragging) {
           // 确定一个点后生成线条，没有拖动控制点改变线条曲率，直接松开。这里直线曲线都可能
           // @todo 如果本来是创建曲线，结果实际上创建了直线，应该移除曲线的控制点，变成真正的直线
-          console.log("初始化下一个坐标点", _cur_path_point?.mirror);
+          // console.log("初始化下一个坐标点", _cur_path_point?.mirror);
           _moving_for_new_line = true;
           _prepare_dragging = false;
           _dragging = false;
@@ -1276,7 +1359,12 @@ export function Canvas(props: CanvasProps) {
     setDebug() {
       _debug = !_debug;
     },
-    handleMouseOut() {},
+    log() {
+      if (_cur_layer) {
+        const content = _cur_layer.logs.join("\n");
+        console.log(content);
+      }
+    },
     onUpdate(handler: Handler<TheTypesOfEvents[Events.Update]>) {
       return bus.on(Events.Update, handler);
     },
@@ -1284,3 +1372,155 @@ export function Canvas(props: CanvasProps) {
 }
 
 export type Canvas = ReturnType<typeof Canvas>;
+
+type CanvasLayerProps = {
+  index?: number;
+  zIndex?: number;
+  disabled?: boolean;
+  onMounted?: (layer: CanvasLayer) => void;
+};
+export function CanvasLayer(props: CanvasLayerProps) {
+  const { index = 0, zIndex = 0, disabled = false } = props;
+
+  let _mounted = false;
+  let _index = index;
+  let _z_index = zIndex;
+  let _disabled = disabled;
+  let _logs: string[] = [];
+
+  enum Events {
+    Mounted,
+  }
+  type TheTypesOfEvents = {
+    [Events.Mounted]: typeof _self;
+  };
+  const bus = base<TheTypesOfEvents>();
+
+  function onMounted(handler: Handler<TheTypesOfEvents[Events.Mounted]>) {
+    return bus.on(Events.Mounted, handler);
+  }
+  let log = (...args: string[]) => {
+    _logs.push(...args);
+  };
+
+  if (props.onMounted) {
+    onMounted(props.onMounted);
+  }
+
+  const _self = {
+    SymbolTag: "CanvasLayer" as const,
+    drawLine(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+      console.log("请实现 drawLine 方法");
+    },
+    drawCurve(curve: { points: { x: number; y: number }[] }) {
+      console.log("请实现 drawCurve 方法");
+    },
+    drawCircle(point: { x: number; y: number }, radius: number) {
+      console.log("请实现 drawCircle 方法");
+    },
+    drawLabel(point: { x: number; y: number }) {
+      console.log("请实现 drawLabel 方法");
+    },
+    drawDiamondAtLineEnd(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+      console.log("请实现 drawDiamondAtLineEnd 方法");
+    },
+    drawPoints() {
+      console.log("请实现 drawPoints 方法");
+    },
+    drawGrid(callback: Function) {
+      console.log("请实现 drawGrid 方法");
+    },
+    clear() {
+      console.log("请实现 clear 方法");
+    },
+    beginPath() {
+      console.log("请实现 beginPath 方法");
+    },
+    closePath() {
+      console.log("请实现 closePath 方法");
+    },
+    moveTo(x: number, y: number) {
+      console.log("请实现 moveTo 方法");
+    },
+    arc(x: number, y: number, radius: number, startAngle: number, endAngle: number, counterclockwise?: boolean) {
+      console.log("请实现 arc 方法");
+    },
+    bezierCurveTo(cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number) {
+      console.log("请实现 bezierCurveTo 方法");
+    },
+    quadraticCurveTo(cpx: number, cpy: number, x: number, y: number) {
+      console.log("请实现 quadraticCurveTo 方法");
+    },
+    lineTo(x: number, y: number) {
+      console.log("请实现 lineTo 方法");
+    },
+    setStrokeStyle(v: string) {
+      console.log("请实现 setStrokeStyle 方法");
+    },
+    setLineWidth(v: number) {
+      console.log("请实现 setLineWidth 方法");
+    },
+    setLineCap(v: LineCapType) {
+      console.log("请实现 setLineWidth 方法");
+    },
+    setLineJoin(v: LineJoinType) {
+      console.log("请实现 setLineJoin 方法");
+    },
+    stroke() {
+      console.log("请实现 stroke 方法");
+    },
+    setGlobalCompositeOperation(v: PathCompositeOperation) {
+      console.log("请实现 setGlobalCompositeOperation 方法");
+    },
+    setFillStyle(v: string) {
+      console.log("请实现 setFillStyle 方法");
+    },
+    fill() {
+      console.log("请实现 fill 方法");
+    },
+    setFont(v: string) {
+      console.log("请实现 setFont 方法");
+    },
+    fillText(text: string, x: number, y: number, maxWidth?: number) {
+      console.log("请实现 fillText 方法");
+    },
+    save() {
+      console.log("请实现 save 方法");
+    },
+    restore() {
+      console.log("请实现 restore 方法");
+    },
+    log,
+    stopLog() {
+      log = () => {};
+    },
+    resumeLog() {
+      log = (...v: string[]) => {
+        _logs.push(...v);
+      };
+    },
+    emptyLogs() {
+      _logs = [];
+    },
+    get logs() {
+      return _logs;
+    },
+    get zIndex() {
+      return _z_index;
+    },
+    get disabled() {
+      return _disabled;
+    },
+    get mounted() {
+      return _mounted;
+    },
+    setMounted() {
+      _mounted = true;
+      bus.emit(Events.Mounted, _self);
+    },
+
+    onMounted,
+  };
+  return _self;
+}
+export type CanvasLayer = ReturnType<typeof CanvasLayer>;

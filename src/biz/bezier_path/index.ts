@@ -183,6 +183,9 @@ export function BezierPath(props: BezierPathProps) {
       }
       return _path_points[index - 1] ?? null;
     },
+    getLastPoint() {
+      return _path_points[_path_points.length - 1] ?? null;
+    },
     findPathPointByPoint(point: BezierPoint) {
       for (let i = 0; i < _path_points.length; i += 1) {
         const path_point = _path_points[i];
@@ -209,8 +212,23 @@ export function BezierPath(props: BezierPathProps) {
       }
       matched.deletePoint(point);
     },
+    removeLastVirtualPoint() {
+      const last = _path_points[_path_points.length - 1];
+      if (!last) {
+        return;
+      }
+      if (!last.virtual) {
+        return;
+      }
+      _path_points = _path_points.filter((p) => p !== last);
+      refresh_bezier_points();
+      bus.emit(Events.PointCountChange);
+    },
     removeLastPoint() {
       const last = _path_points[_path_points.length - 1];
+      if (!last) {
+        return;
+      }
       // console.log("[BIZ]bezier_path/index - removeLastPoint", last);
       _path_points = _path_points.filter((p) => p !== last);
       refresh_bezier_points();
@@ -535,25 +553,27 @@ export function BezierPath(props: BezierPathProps) {
           if (cur.hidden) {
             return;
           }
-          if (prev && prev.to && cur.from) {
-            // 三次贝塞尔
-            commands.push({
-              c: "C",
-              a: [prev.to.x, prev.to.y, cur.from.x, cur.from.y, cur.x, cur.y],
-              end: prev ? prev.point.pos : null,
-              start: next && !next.from ? cur.point.pos : null,
-            });
-            return;
-          }
-          if (cur.from) {
-            // 二次贝塞尔
-            commands.push({
-              c: "Q",
-              a: [cur.from.x, cur.from.y, cur.point.x, cur.point.y],
-              end: prev ? prev.point.pos : null,
-              start: next && !next.from ? cur.point.pos : null,
-            });
-            return;
+          if (prev) {
+            if (prev.to && cur.from) {
+              // 三次贝塞尔
+              commands.push({
+                c: "C",
+                a: [prev.to.x, prev.to.y, cur.from.x, cur.from.y, cur.x, cur.y],
+                end: prev ? prev.point.pos : null,
+                start: next && !next.from ? cur.point.pos : null,
+              });
+              return;
+            }
+            if (!prev.to && cur.from) {
+              // 二次贝塞尔
+              commands.push({
+                c: "Q",
+                a: [cur.from.x, cur.from.y, cur.point.x, cur.point.y],
+                end: prev ? prev.point.pos : null,
+                start: next && !next.from ? cur.point.pos : null,
+              });
+              return;
+            }
           }
           if (cur.circle) {
             // 弧线
