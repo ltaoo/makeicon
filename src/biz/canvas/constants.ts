@@ -1,3 +1,5 @@
+export const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
+
 /** 画布内容类型 */
 export enum CanvasThingTypes {
   /** 文字内容 */

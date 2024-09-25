@@ -11,7 +11,6 @@ import { Dialog, Input, Textarea } from "@/components/ui";
 import { DialogCore, InputCore } from "@/domains/ui";
 import { connect, connectLayer } from "@/biz/canvas/connect.web";
 import { Canvas } from "@/biz/canvas";
-import { Line } from "@/biz/line";
 
 export const HomeIndexPage: ViewComponent = (props) => {
   const { app } = props;
@@ -22,53 +21,13 @@ export const HomeIndexPage: ViewComponent = (props) => {
     async onChange(v) {
       const buffer = await v[0].arrayBuffer();
       const font = opentype.parse(buffer);
-      const r = font.getPath("趣字幕", 0, 0, 200);
-      let str = "";
-      const tokens = r.commands.map((p) => {
-        const { type, x, y, x1, y1, x2, y2 } = p as {
-          type: string;
-          x?: string;
-          y?: string;
-          x1?: string;
-          y1?: string;
-          x2?: string;
-          y2?: string;
-        };
-        if (type === "Q" && x && y && x1 && y1) {
-          str += `Q${x1} ${y1} ${x} ${y}`;
-          return [type, x1, y1, x, y];
-        }
-        if (type === "C" && x && y && x1 && y1 && x2 && y2) {
-          str += `C${x1} ${y1} ${x2} ${y2} ${x} ${y}`;
-          return [type, x1, y1, x2, y2, x, y];
-        }
-        if (type === "Z") {
-          str += `Z`;
-          return [type];
-        }
-        if (type === "M" && x && y) {
-          str += `M${x} ${y}`;
-          return [type, x, y];
-        }
-        if (type === "L" && x && y) {
-          str += `L${x} ${y}`;
-          return [type, x, y];
-        }
-        return [];
-      });
-      // console.log(str);
-      const path = Line({
-        fill: {
-          color: "#000",
-        },
-        stroke: null,
-      });
-      $$canvas.buildPath(path, tokens, { exp: false, scale: 1 });
-      $$canvas.setPaths([path]);
+      const r = font.getPath("MakeIcon", 0, 0, 200);
+      const { paths } = $$canvas.buildBezierPathsFromOpentype(r.commands);
+      // $$canvas.appendObject(paths);
       preview();
     },
   });
-  const $$canvas = Canvas({ paths: [] });
+  const $$canvas = Canvas({});
   const $dialog = new DialogCore({
     onOk() {
       if (!$input.value) {
@@ -86,7 +45,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
         return;
       }
       const { dimensions, paths } = result;
-      $$canvas.setPaths(paths, { transform: true, dimensions });
+      // $$canvas.appendObject(paths, { transform: true, dimensions });
       preview();
       $dialog.hide();
     },
@@ -102,12 +61,12 @@ export const HomeIndexPage: ViewComponent = (props) => {
   });
 
   const [state, setState] = createSignal($$canvas.state);
-  const [layers, setLayers] = createSignal($$canvas.layers);
+  const [layers, setLayers] = createSignal($$canvas.layerList);
   const [icons, setIcons] = createSignal<{ content: string; text: string; width: string; height: string }[]>([]);
   const [code, setCode] = createSignal("");
 
   function preview() {
-    const result = $$canvas.preview();
+    const result = $$canvas.buildPreviewIcons();
     if (result.length === 0) {
       app.tip({
         text: ["没有内容"],
@@ -118,21 +77,21 @@ export const HomeIndexPage: ViewComponent = (props) => {
   }
   function draw() {
     // console.log("[PAGE]index/index - draw", $$canvas.paths.length);
-    const $$layer = $$canvas.layer;
-    const $layer = $$canvas.layers[1];
-    if (!$$layer) {
+    const $graph_layer = $$canvas.layer;
+    const $pen_layer = $$canvas.layers.path;
+    if (!$graph_layer) {
       return;
     }
-    $$layer.clear();
-    $layer.clear();
-    $$layer.emptyLogs();
+    $graph_layer.clear();
+    $pen_layer.clear();
+    $graph_layer.emptyLogs();
     // $$layer.resumeLog();
-    if ($$canvas.debug) {
-      const m = $$canvas.getMousePoint();
-      $$layer.setFillStyle("black");
-      $$layer.setFont("10px Arial");
-      $$layer.fillText(m.text, m.x, m.y);
-    }
+    // if ($$canvas.debug) {
+    //   const m = $$canvas.getMousePoint();
+    //   $$layer.setFillStyle("black");
+    //   $$layer.setFont("10px Arial");
+    //   $$layer.fillText(m.text, m.x, m.y);
+    // }
     // console.log("[PAGE]before render $$canvas.paths", $$canvas.paths);
     for (let i = 0; i < $$canvas.paths.length; i += 1) {
       const $$prev_path = $$canvas.paths[i - 1];
@@ -175,11 +134,11 @@ export const HomeIndexPage: ViewComponent = (props) => {
         // ctx.restore();
       }
       // 绘制路径
-      console.log("[PAGE]home/index render $$canvas.paths", $$canvas.state.mode);
+      console.log("[PAGE]home/index render $$canvas.paths");
       for (let j = 0; j < $$path.paths.length; j += 1) {
         const $sub_path = $$path.paths[j];
         const commands = $sub_path.buildCommands();
-        $$layer.save();
+        $graph_layer.save();
         for (let i = 0; i < commands.length; i += 1) {
           const prev = commands[i - 1];
           const command = commands[i];
@@ -188,87 +147,67 @@ export const HomeIndexPage: ViewComponent = (props) => {
           if (command.c === "M") {
             const [x, y] = command.a;
             // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
-            $$layer.beginPath();
-            $$layer.moveTo(x, y);
-            $layer.beginPath();
-            $layer.moveTo(x, y);
+            $graph_layer.beginPath();
+            $graph_layer.moveTo(x, y);
+            $pen_layer.beginPath();
+            $pen_layer.moveTo(x, y);
           }
           if (command.c === "A") {
             // console.log('A', command);
             const [c1x, c1y, radius, angle1, angle2, counterclockwise] = command.a;
-            $$layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
-            $layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
+            $graph_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
+            $pen_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
             // if (command.end) {
             //   ctx.moveTo(command.end.x, command.end.y);
             // }
           }
           if (command.c === "C") {
             const [c1x, c1y, c2x, c2y, ex, ey] = command.a;
-            $$layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
-            $layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+            $graph_layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+            $pen_layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
             // if (command.p) {
             //   ctx.moveTo(command.p.x, command.p.y);
             // }
           }
           if (command.c === "Q") {
             const [c1x, c1y, ex, ey] = command.a;
-            $$layer.quadraticCurveTo(c1x, c1y, ex, ey);
-            $layer.quadraticCurveTo(c1x, c1y, ex, ey);
+            $graph_layer.quadraticCurveTo(c1x, c1y, ex, ey);
+            $pen_layer.quadraticCurveTo(c1x, c1y, ex, ey);
           }
           if (command.c === "L") {
             const [x, y] = command.a;
-            $$layer.lineTo(x, y);
-            $layer.lineTo(x, y);
+            $graph_layer.lineTo(x, y);
+            $pen_layer.lineTo(x, y);
           }
           if (command.c === "Z") {
-            $$layer.closePath();
-            $layer.closePath();
+            $graph_layer.closePath();
+            $pen_layer.closePath();
           }
         }
-        $layer.setStrokeStyle("lightgrey");
-        $layer.setLineWidth(1);
-        $layer.stroke();
+        $pen_layer.setStrokeStyle("lightgrey");
+        $pen_layer.setLineWidth(1);
+        $pen_layer.stroke();
         if (state.fill.enabled && $sub_path.closed) {
-          // if ($$path.prev) {
-          //   const cur_size = $$path.size;
-          //   const prev_size = $$path.prev.size;
-          //   // console.log("----------------");
-          //   // console.log("check need update composition opertion");
-          //   // console.log(cur_size.x, cur_size.y, cur_size.x2, cur_size.y2);
-          //   // console.log(prev_size.x, prev_size.y, prev_size.x2, prev_size.y2);
-          //   if (
-          //     cur_size.x > prev_size.x &&
-          //     cur_size.y > prev_size.y &&
-          //     cur_size.x2 < prev_size.x2 &&
-          //     cur_size.y2 < prev_size.y2
-          //   ) {
-          //     log(`ctx.globalCompositeOperation = "destination-out";`);
-          //     ctx.globalCompositeOperation = "destination-out";
-          //   }
-          // }
           if ($sub_path.composite === "destination-out") {
-            $$layer.setGlobalCompositeOperation($sub_path.composite);
+            $graph_layer.setGlobalCompositeOperation($sub_path.composite);
           }
-          $$layer.setFillStyle(state.fill.color);
-          $$layer.fill();
-          // if ($$path.composite === "destination-out") {
-          //   ctx.globalCompositeOperation = "source-out";
-          // }
+          $graph_layer.setFillStyle(state.fill.color);
+          $graph_layer.fill();
         }
         if (state.stroke.enabled) {
-          $$layer.setStrokeStyle(state.stroke.color);
-          $$layer.setLineWidth($$canvas.grid.unit * state.stroke.width);
-          $$layer.setLineCap(state.stroke.start_cap);
-          $$layer.setLineJoin(state.stroke.join);
-          $$layer.stroke();
+          $graph_layer.setStrokeStyle(state.stroke.color);
+          $graph_layer.setLineWidth($$canvas.grid.unit * state.stroke.width);
+          $graph_layer.setLineCap(state.stroke.start_cap);
+          $graph_layer.setLineJoin(state.stroke.join);
+          $graph_layer.stroke();
         }
-        $$layer.restore();
-        $$layer.stopLog();
+        $graph_layer.restore();
+        $graph_layer.stopLog();
         // 绘制锚点
-        if ($$canvas.state.mode === 2 || $$canvas.state.mode === 3) {
+        if ($$canvas.isMode("path_editing")) {
           if ($$canvas.state.cursor) {
             // const $layer = $$canvas.layers[1];
-            $layer.save();
+            $pen_layer.save();
             for (let k = 0; k < $sub_path.skeleton.length; k += 1) {
               const point = $sub_path.skeleton[k];
               // console.log("[PAGE]home/index", i, point.start ? "start" : "", point.from, point.to, point.virtual);
@@ -276,46 +215,52 @@ export const HomeIndexPage: ViewComponent = (props) => {
                 if (point.hidden) {
                   return;
                 }
-                $layer.beginPath();
-                $layer.setLineWidth(0.5);
-                $layer.setStrokeStyle("lightgrey");
+                $pen_layer.beginPath();
+                $pen_layer.setLineWidth(0.5);
+                $pen_layer.setStrokeStyle("lightgrey");
                 if (point.from) {
-                  $layer.drawLine(point, point.from);
+                  $pen_layer.drawLine(point, point.from);
                 }
                 if (point.to && !point.virtual) {
-                  $layer.drawLine(point, point.to);
+                  $pen_layer.drawLine(point, point.to);
                 }
-                $layer.setStrokeStyle("black");
+                $pen_layer.setStrokeStyle("black");
                 const radius = 3;
-                $layer.drawCircle(point.point, radius);
+                $pen_layer.drawCircle(point.point, radius);
                 if (point.from) {
-                  $layer.drawDiamondAtLineEnd(point, point.from);
+                  $pen_layer.drawDiamondAtLineEnd(point, point.from);
                 }
                 if (point.to && !point.virtual) {
-                  $layer.drawDiamondAtLineEnd(point, point.to);
+                  $pen_layer.drawDiamondAtLineEnd(point, point.to);
                 }
               })();
             }
-            $layer.restore();
+            $pen_layer.restore();
           }
         }
       }
       if ($$path.selected) {
         const box = $$path.box;
-        $layer.drawRect(box);
+        $pen_layer.drawRect(box);
       }
     }
   }
 
-  $$canvas.onUpdate(() => {
+  $$canvas.onRefresh(() => {
     draw();
   });
-  $$canvas.onChange((v) => setState(v));
-  app.onKeyup(({ code }) => {
-    if (code === "Backspace") {
-      $$canvas.deleteCurPoint();
-    }
+  $$canvas.$selection.onChange((state) => {
+    const $layer = $$canvas.layers.range;
+    console.log("[PAGE]before drawRect", state);
+    $layer.clear();
+    $layer.drawRect(state);
   });
+  $$canvas.onChange((v) => setState(v));
+  // app.onKeyup(({ code }) => {
+  //   if (code === "Backspace") {
+  //     $$canvas.deleteCurPoint();
+  //   }
+  // });
 
   return (
     <>
@@ -379,7 +324,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
-                $$canvas.selectCursor();
+                $$canvas.selectEditingSelect();
               }}
             >
               选择
@@ -387,7 +332,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
-                $$canvas.selectPen();
+                $$canvas.selectEditingPen();
               }}
             >
               钢笔
@@ -395,7 +340,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
             <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
-                $$canvas.selectObject();
+                $$canvas.selectDefaultSelect();
               }}
             >
               完成

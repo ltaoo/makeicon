@@ -1,21 +1,35 @@
-/**
- * @file 画布框选
- */
-
-import { base } from "@/domains/base";
+import { base, Handler } from "@/domains/base";
 
 import { Position, RectShape } from "./types";
 import { createEmptyRectShape } from "./utils";
+import { CanvasPointer } from "./mouse";
 
-export function CanvasRangeSelection() {
+type CanvasRangeSelectionProps = {
+  pointer: CanvasPointer;
+};
+/**
+ * 画布上框选逻辑
+ */
+export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
+  const { pointer: _$pointer } = props;
+
   let _isPressing = false;
   let _isRangeSelecting = false;
   let _rangeStartPosition: null | Position = null;
   /** 选框信息，位置、大小等 */
   let _rangeSelection = createEmptyRectShape();
   const _state = {
-    get range() {
-      return _rangeSelection;
+    get x() {
+      return _rangeSelection.left;
+    },
+    get y() {
+      return _rangeSelection.top;
+    },
+    get x1() {
+      return _rangeSelection.left + _rangeSelection.width;
+    },
+    get y1() {
+      return _rangeSelection.top + _rangeSelection.height;
     },
   };
 
@@ -30,17 +44,11 @@ export function CanvasRangeSelection() {
   return {
     SymbolTag: "CanvasRange",
     state: _state,
-    setPressing(v: boolean) {
-      _isPressing = v;
-    },
     /**
      * 开始框选
      */
     startRangeSelect(pos: Position) {
       console.log("[DOMAIN]Canvas - startRangeSelect", _isPressing);
-      if (_isPressing) {
-        return;
-      }
       // console.log("[DOMAIN]Canvas - startRangeSelect", pos);
       _rangeStartPosition = pos;
     },
@@ -52,7 +60,7 @@ export function CanvasRangeSelection() {
       if (_rangeStartPosition === null) {
         return;
       }
-      if (_isPressing) {
+      if (!_$pointer.dragging) {
         return;
       }
       // console.log("[DOMAIN]Canvas - rangeSelect", x, y);
@@ -65,7 +73,10 @@ export function CanvasRangeSelection() {
       //   console.warn(errMsg);
       //   return this;
       // }
-      const rectInfo = this.client;
+      const rectInfo = {
+        left: 0,
+        top: 0,
+      };
       const parentRect = {
         left: rectInfo.left,
         top: rectInfo.top,
@@ -84,19 +95,23 @@ export function CanvasRangeSelection() {
       // console.log("[DOMAIN]Canvas - rangeSelect", selectedContents);
       // @todo 其实这里也可以给外部决定哪些能「选中」
       //       this.selectThings(selectedThings.map((content) => content.id));
+      bus.emit(Events.Change, { ..._state });
     },
     /**
      * 结束框选
      */
     endRangeSelect() {
+      console.log("[BIZ]canvas/range - endRangeSelect", _isRangeSelecting);
       if (_isRangeSelecting === false) {
         return;
       }
-      // console.log("[DOMAIN]Canvas - endRangeSelect");
       _isRangeSelecting = false;
-      const emptyRect = createEmptyRectShape();
-      _rangeSelection = emptyRect;
-      //       this.emitter.emit("updateRangeSelection", emptyRect);
+      _rangeStartPosition = null;
+      _rangeSelection = createEmptyRectShape();
+      bus.emit(Events.Change, { ..._state });
+    },
+    onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
+      return bus.on(Events.Change, handler);
     },
   };
 }

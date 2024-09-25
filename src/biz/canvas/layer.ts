@@ -1,18 +1,19 @@
 import { base, Handler } from "@/domains/base";
 import { Point } from "@/biz/point";
 import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
+import { uuidFactory } from "./utils";
 
 type CanvasLayerProps = {
-  index?: number;
   zIndex?: number;
   disabled?: boolean;
   onMounted?: (layer: CanvasLayer) => void;
 };
+const uid = uuidFactory();
 export function CanvasLayer(props: CanvasLayerProps) {
-  const { index = 0, zIndex = 0, disabled = false } = props;
+  const { zIndex = 0, disabled = false } = props;
 
   let _mounted = false;
-  let _index = index;
+  let _index = uid();
   let _z_index = zIndex;
   let _disabled = disabled;
   let _logs: string[] = [];
