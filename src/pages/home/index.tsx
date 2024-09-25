@@ -3,18 +3,71 @@
  * @todo 支持 垫底图 来描图标，手动对一些使用弧线的图标进行转化
  */
 import { createSignal, For, onMount } from "solid-js";
+import { Copy } from "lucide-solid";
+import opentype from "opentype.js";
 
 import { ViewComponent } from "@/store/types";
-import { Dialog, Textarea } from "@/components/ui";
+import { Dialog, Input, Textarea } from "@/components/ui";
 import { DialogCore, InputCore } from "@/domains/ui";
 import { connect, connectLayer } from "@/biz/canvas/connect.web";
 import { Canvas } from "@/biz/canvas";
-import { objectToHTML } from "@/utils";
-import { Copy } from "lucide-solid";
+import { Line } from "@/biz/line";
 
 export const HomeIndexPage: ViewComponent = (props) => {
   const { app } = props;
 
+  const $upload = new InputCore({
+    defaultValue: {} as File[],
+    type: "file",
+    async onChange(v) {
+      const buffer = await v[0].arrayBuffer();
+      const font = opentype.parse(buffer);
+      const r = font.getPath("趣字幕", 0, 0, 200);
+      let str = "";
+      const tokens = r.commands.map((p) => {
+        const { type, x, y, x1, y1, x2, y2 } = p as {
+          type: string;
+          x?: string;
+          y?: string;
+          x1?: string;
+          y1?: string;
+          x2?: string;
+          y2?: string;
+        };
+        if (type === "Q" && x && y && x1 && y1) {
+          str += `Q${x1} ${y1} ${x} ${y}`;
+          return [type, x1, y1, x, y];
+        }
+        if (type === "C" && x && y && x1 && y1 && x2 && y2) {
+          str += `C${x1} ${y1} ${x2} ${y2} ${x} ${y}`;
+          return [type, x1, y1, x2, y2, x, y];
+        }
+        if (type === "Z") {
+          str += `Z`;
+          return [type];
+        }
+        if (type === "M" && x && y) {
+          str += `M${x} ${y}`;
+          return [type, x, y];
+        }
+        if (type === "L" && x && y) {
+          str += `L${x} ${y}`;
+          return [type, x, y];
+        }
+        return [];
+      });
+      // console.log(str);
+      const path = Line({
+        fill: {
+          color: "#000",
+        },
+        stroke: null,
+      });
+      $$canvas.buildPath(path, tokens, { exp: false, scale: 1 });
+      $$canvas.setPaths([path]);
+      preview();
+    },
+  });
   const $$canvas = Canvas({ paths: [] });
   const $dialog = new DialogCore({
     onOk() {
@@ -44,14 +97,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
       setCode("");
     },
   });
-  // const d = `M288 373.333333c-82.432 0-149.333333 66.922667-149.333333 149.333334a149.333333 149.333333 0 0 0 149.333333 149.333333c82.496 0 149.333333-66.816 149.333333-149.333333 0-82.410667-66.88-149.333333-149.333333-149.333334z m0 64c47.104 0 85.333333 38.250667 85.333333 85.333334 0 47.146667-38.186667 85.333333-85.333333 85.333333a85.333333 85.333333 0 1 1 0-170.666667zM757.333333 672a128.021333 128.021333 0 1 0 128 128c0-70.656-57.344-128-128-128z m0 64a64.021333 64.021333 0 1 1-64 64c0-35.328 28.672-64 64-64zM757.333333 117.333333a128.021333 128.021333 0 1 0 128 128c0-70.656-57.344-128-128-128z m0 64a64.021333 64.021333 0 1 1-64 64c0-35.328 28.672-64 64-64z`;
-  // const d = `M 757.3333 672 A 128.0213 128.0213 0 1 0 885.3333 800 C 885.3333 729.344 827.9893 672 757.3333 672 Z M 757.3333 736 A 64.0213 64.0213 0 1 1 693.3333 800 C 693.3333 764.672 722.0053 736 757.3333 736 Z`;
-  // const d = `M 649.7674 305.9614 C 630.2507 305.9614 614.4454 321.9374 614.4454 341.6674 V 376.4989 C 614.4454 396.2289 630.2507 412.2262 649.7674 412.2262 C 669.2841 412.2262 685.0894 396.2289 685.0894 376.4989 V 341.6674 C 685.0894 321.9374 669.2841 305.9614 649.7674 305.9614 Z`;
-  // const d = `M 648.128 241.7707 C 700.544 242.7307 743.424 258.752 774.9547 290.2827 C 806.5067 321.856 822.464 364.6933 823.2747 417.0027 A 32 32 0 1 1 759.2747 418.0053 C 758.72 381.4187 748.7147 354.5387 729.7067 335.552 C 710.6773 316.5227 683.6907 306.432 646.9333 305.7493 A 32 32 0 0 1 648.128 241.7707 Z`;
-  // const d = `M 518.4 149.2907 C 630.9973 68.5013 786.2827 79.8933 886.528 181.2907 C 940.3947 235.8187 970.6667 310.144 970.6667 387.6693 C 970.6667 465.1947 940.3733 539.52 886.5707 594.0053 L 592.1493 893.5253 A 110.976 110.976 0 0 1 511.936 928 A 110.72 110.72 0 0 1 432.0213 893.824 L 137.3227 593.7707 C 83.5627 539.2427 53.3333 464.9813 53.3333 387.5413 S 83.5627 235.8187 137.344 181.2693 C 239.3173 78.1227 398.336 68.1173 511.36 153.6427 L 511.9147 154.0693 Z`;
-  // const d = `M 1129.1307 0 H 121.8316 A 109.6168 109.6168 0 0 0 12.1905 109.6411 V 219.2823 A 109.6168 109.6168 0 0 0 121.8316 328.9234 H 1129.1307 A 109.6168 109.6168 0 0 0 1238.7718 219.2823 V 109.6411 A 109.6168 109.6168 0 0 0 1129.1307 0 Z M 1156.5592 219.2823 C 1156.5592 234.3497 1144.2225 246.6865 1129.1307 246.6865 H 121.8316 A 27.5017 27.5017 0 0 1 94.4274 219.2823 V 109.6411 C 94.4274 94.5737 106.7642 82.237 121.8316 82.237 H 1129.1307 C 1144.2225 82.237 1156.5592 94.5737 1156.5592 109.6411 V 219.2823 Z M 1008.2499 512.5851 H 243.395 L 250.9288 430.3238 H 1000.7162 L 1008.2743 512.5608 Z M 260.2423 328.899 L 250.9288 430.3238 L 243.3707 512.5608 L 200.4846 976.4815 A 40.96 40.96 0 0 1 159.6465 1013.76 C 158.4274 1013.76 157.0621 1013.76 155.8187 1013.6137 A 41.0575 41.0575 0 0 1 118.6865 968.9234 L 177.8834 328.9234 H 260.2423 Z M 1095.9726 1013.6137 C 1094.7535 1013.76 1093.3638 1013.76 1092.1448 1013.76 C 1071.1771 1013.76 1053.2084 997.7173 1051.2823 976.4571 L 1008.2499 512.5608 L 1000.7162 430.3238 L 991.4027 328.899 H 1074.0541 L 1133.251 968.9234 A 41.2526 41.2526 0 0 1 1095.9726 1013.6137 Z`;
   const $input = new InputCore({
-    // defaultValue: `<svg t="1725376930087" class="icon" viewBox="0 0 1043 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1891" data-spm-anchor-id="a313x.collections_detail.0.i4.361a3a81f5lUb4" width="200" height="200"><path d="${d}" fill="#111111" p-id="1892" data-spm-anchor-id="a313x.collections_detail.0.i2.361a3a81f5lUb4" class=""></path></svg>`,
     defaultValue: ``,
   });
 
@@ -71,7 +117,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
     setIcons(result);
   }
   function draw() {
-    console.log("[PAGE]index/index - draw", $$canvas.paths.length);
+    // console.log("[PAGE]index/index - draw", $$canvas.paths.length);
     const $$layer = $$canvas.layer;
     const $layer = $$canvas.layers[1];
     if (!$$layer) {
@@ -129,6 +175,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
         // ctx.restore();
       }
       // 绘制路径
+      console.log("[PAGE]home/index render $$canvas.paths", $$canvas.state.mode);
       for (let j = 0; j < $$path.paths.length; j += 1) {
         const $sub_path = $$path.paths[j];
         const commands = $sub_path.buildCommands();
@@ -137,7 +184,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
           const prev = commands[i - 1];
           const command = commands[i];
           const next_command = commands[i + 1];
-          // console.log("[PAGE]command", command.c);
+          // console.log("[PAGE]command", command.c, command.a);
           if (command.c === "M") {
             const [x, y] = command.a;
             // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
@@ -218,38 +265,44 @@ export const HomeIndexPage: ViewComponent = (props) => {
         $$layer.restore();
         $$layer.stopLog();
         // 绘制锚点
-        if ($$canvas.state.cursor) {
-          // const $layer = $$canvas.layers[1];
-          $layer.save();
-          for (let k = 0; k < $sub_path.skeleton.length; k += 1) {
-            const point = $sub_path.skeleton[k];
-            // console.log("[PAGE]home/index", i, point.start ? "start" : "", point.from, point.to, point.virtual);
-            (() => {
-              if (point.hidden) {
-                return;
-              }
-              $layer.beginPath();
-              $layer.setLineWidth(0.5);
-              $layer.setStrokeStyle("lightgrey");
-              if (point.from) {
-                $layer.drawLine(point, point.from);
-              }
-              if (point.to && !point.virtual) {
-                $layer.drawLine(point, point.to);
-              }
-              $layer.setStrokeStyle("black");
-              const radius = 3;
-              $layer.drawCircle(point.point, radius);
-              if (point.from) {
-                $layer.drawDiamondAtLineEnd(point, point.from);
-              }
-              if (point.to && !point.virtual) {
-                $layer.drawDiamondAtLineEnd(point, point.to);
-              }
-            })();
+        if ($$canvas.state.mode === 2 || $$canvas.state.mode === 3) {
+          if ($$canvas.state.cursor) {
+            // const $layer = $$canvas.layers[1];
+            $layer.save();
+            for (let k = 0; k < $sub_path.skeleton.length; k += 1) {
+              const point = $sub_path.skeleton[k];
+              // console.log("[PAGE]home/index", i, point.start ? "start" : "", point.from, point.to, point.virtual);
+              (() => {
+                if (point.hidden) {
+                  return;
+                }
+                $layer.beginPath();
+                $layer.setLineWidth(0.5);
+                $layer.setStrokeStyle("lightgrey");
+                if (point.from) {
+                  $layer.drawLine(point, point.from);
+                }
+                if (point.to && !point.virtual) {
+                  $layer.drawLine(point, point.to);
+                }
+                $layer.setStrokeStyle("black");
+                const radius = 3;
+                $layer.drawCircle(point.point, radius);
+                if (point.from) {
+                  $layer.drawDiamondAtLineEnd(point, point.from);
+                }
+                if (point.to && !point.virtual) {
+                  $layer.drawDiamondAtLineEnd(point, point.to);
+                }
+              })();
+            }
+            $layer.restore();
           }
-          $layer.restore();
         }
+      }
+      if ($$path.selected) {
+        const box = $$path.box;
+        $layer.drawRect(box);
       }
     }
   }
@@ -339,6 +392,14 @@ export const HomeIndexPage: ViewComponent = (props) => {
             >
               钢笔
             </div>
+            <div
+              class="inline-block px-4 border text-sm bg-white cursor-pointer"
+              onClick={() => {
+                $$canvas.selectObject();
+              }}
+            >
+              完成
+            </div>
             {/* <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"
               onClick={() => {
@@ -386,6 +447,9 @@ export const HomeIndexPage: ViewComponent = (props) => {
               }}
             >
               小程序代码
+            </div>
+            <div>
+              <Input store={$upload} />
             </div>
             {/* <div
               class="inline-block px-4 border text-sm bg-white cursor-pointer"

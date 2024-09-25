@@ -1,7 +1,8 @@
-import { BezierPoint } from "@/biz/bezier_point";
-import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/bezier_path";
+import { Point } from "@/biz/point";
+import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
 
-import { Canvas, CanvasLayer } from "./index";
+import { Canvas } from "./index";
+import { CanvasLayer } from "./layer";
 
 export function connect(store: Canvas, $canvas: HTMLDivElement) {
   if (store.mounted) {
@@ -82,21 +83,32 @@ export function connectLayer(
     ctx.stroke();
     ctx.fillStyle = "white";
     ctx.fill();
-    // ctx.fillStyle = "black";
-    // ctx.font = "10px Arial";
-    // const x = point.x;
-    // const y = point.y;
-    // // @ts-ignore
-    // ctx.fillText(`${point._uid}、${x},${y}`, x + 2, y - 2);
+    ctx.fillStyle = "black";
+    ctx.font = "10px Arial";
+    const x = point.x;
+    const y = point.y;
+    // @ts-ignore
+    ctx.fillText(`${x},${y}`, x + 2, y - 2);
   };
-  layer.drawLabel = (point: BezierPoint) => {
+  layer.drawRect = (rect: { x: number; y: number; x1: number; y1: number }) => {
+    ctx.beginPath();
+    ctx.moveTo(rect.x, rect.y);
+    ctx.lineTo(rect.x1, rect.y);
+    ctx.lineTo(rect.x1, rect.y1);
+    ctx.lineTo(rect.x, rect.y1);
+    ctx.closePath();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "blue";
+    ctx.stroke();
+  };
+  layer.drawLabel = (point: Point) => {
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
     const x = point.x;
     const y = point.y;
     ctx.fillText(`${point.uid}|${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
   };
-  layer.drawPoints = (points: BezierPoint[]) => {
+  layer.drawPoints = (points: Point[]) => {
     console.log("layer.drawPoints", points.length);
     points.forEach((p, i) => {
       layer.drawCircle(p, 3);
@@ -135,6 +147,11 @@ export function connectLayer(
     ctx.stroke();
     ctx.fillStyle = "white";
     ctx.fill();
+    ctx.fillStyle = "black";
+    ctx.font = "10px Arial";
+    const x = diamondBottomX;
+    const y = diamondBottomY;
+    ctx.fillText(`${x},${y}`, x + 2, y - 2);
   };
   layer.drawGrid = (finish: Function) => {
     const { width, height } = canvas.size;

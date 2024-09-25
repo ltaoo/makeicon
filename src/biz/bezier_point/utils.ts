@@ -1,6 +1,6 @@
 import { Bezier } from "@/utils/bezier/bezier";
 
-import { CircleCurved, PathPoint } from "./index";
+import { CircleCurved, BezierPoint } from "./index";
 
 export function findSymmetricPoint(point2: { x: number; y: number }, point: { x: number; y: number }) {
   const symmetricPoint = {

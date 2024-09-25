@@ -1,5 +1,3 @@
-import { Result } from "@/domains/result/index";
-
 export type Unpacked<T> = T extends (infer U)[]
   ? U
   : T extends (...args: any[]) => infer U
@@ -12,6 +10,11 @@ export type MutableRecord<U> = {
     type: SubType;
     data: U[SubType];
   };
+}[keyof U];
+export type MutableRecord2<U> = {
+  [SubType in keyof U]: {
+    type: SubType;
+  } & U[SubType];
 }[keyof U];
 export type Shift<T extends any[]> = ((...args: T) => void) extends (arg1: any, ...rest: infer R) => void ? R : never;
 export type Rect = {

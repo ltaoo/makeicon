@@ -11,3 +11,4 @@
 ![导入SVG图标](assets/makeicon-example.png)
 
 并且可以直接生成小程序代码，复制到小程序项目即可直接生效。
+

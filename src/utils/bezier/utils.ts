@@ -64,8 +64,14 @@ const utils = {
     }
     return sqrt(l);
   },
-
-  compute: function (t, points, _3d) {
+  /**
+   * 获取插值点，或者说获取曲线上指定 t 的点的坐标
+   * @param t
+   * @param points
+   * @param _3d
+   * @param ratios
+   */
+  compute(t: number, points: { x: number; y: number; z?: number }[], _3d: boolean, ratios?: number[]) {
     // shortcuts
     if (t === 0) {
       points[0].t = 0;
@@ -205,8 +211,23 @@ const utils = {
       };
     }
   },
-
-  derive: function (points, _3d) {
+  /**
+   * 计算给定点数组的导数（或差分）。导数可以被认为是相邻点之间的变化率
+   * @example
+   * ```
+   * const points = [
+   *  { x: 1, y: 2 },
+   *  { x: 3, y: 4 },
+   *  { x: 5, y: 6 }
+   * ];
+   * const result = derive(points, false);
+   * // [[{ x: 4, y: 4 }, { x: 4, y: 4 }], [{ x: 0, y: 0 }]];
+   * result;
+   * ```
+   * 1、两个相邻点之间的导数（变化量）是相同的，即 x 和 y 的变化都是 4。这进一步确认了这些点之间的线性关系。
+   * 2、导数的第一轮计算结果为 4，表明在每个相邻点之间，x 和 y 都增加了相同的量（每次增加 2），而第二轮导数结果为 0，表示在一条直线上的点之间，变化率（导数）是恒定的，没有进一步的变化。
+   */
+  derive(points: { x: number; y: number; z?: number }[], _3d: boolean) {
     const dpoints = [];
     for (let p = points, d = p.length, c = d - 1; d > 1; d--, c--) {
       const list = [];
@@ -247,7 +268,7 @@ const utils = {
     return z * sum;
   },
 
-  map: function (v, ds, de, ts, te) {
+  map(v: number, ds: number, de: number, ts: number, te: number) {
     const d1 = de - ds,
       d2 = te - ts,
       v2 = v - ds,
@@ -296,17 +317,19 @@ const utils = {
   round: function (v, d) {
     return parseFloat(Number(v).toFixed(d));
   },
-
-  dist: function (p1, p2) {
-    const dx = p1.x - p2.x,
-      dy = p1.y - p2.y;
+  /** 获取两个点的直线距离 */
+  dist(p1, p2) {
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
     return sqrt(dx * dx + dy * dy);
   },
-
-  closest: function (LUT, point) {
-    let mdist = pow(2, 63),
-      mpos,
-      d;
+  /**
+   * 在曲线的 LUT 中，找到和指定 point 最接近的点？
+   */
+  closest(LUT, point) {
+    let mdist = pow(2, 63);
+    let mpos;
+    let d;
     LUT.forEach(function (p, idx) {
       d = utils.dist(point, p);
       if (d < mdist) {
@@ -314,7 +337,12 @@ const utils = {
         mpos = idx;
       }
     });
-    return { mdist: mdist, mpos: mpos };
+    return {
+      /** 距离 */
+      mdist: mdist,
+      /** 点下标 */
+      mpos: mpos,
+    };
   },
 
   abcratio: function (t, n) {
@@ -342,8 +370,8 @@ const utils = {
     } else if (t === 0 || t === 1) {
       return t;
     }
-    const top = pow(1 - t, n),
-      bottom = pow(t, n) + top;
+    const top = pow(1 - t, n);
+    const bottom = pow(t, n) + top;
     return top / bottom;
   },
 
@@ -435,8 +463,15 @@ const utils = {
     return shape;
   },
 
-  getminmax: function (curve, d, list) {
-    if (!list) return { min: 0, max: 0 };
+  /**
+   * 获取一条曲线在指定方向上坐标的最小值和最大值
+   * @param {Bezier} curve
+   * @param {string} d 指定方向 x 或 y
+   */
+  getminmax(curve: Bezier, d: string, list) {
+    if (!list) {
+      return { min: 0, mid: 0, max: 0, size: 0 };
+    }
     let min = nMax,
       max = nMin,
       t,
@@ -459,17 +494,16 @@ const utils = {
     }
     return { min: min, mid: (min + max) / 2, max: max, size: max - min };
   },
-
-  align: function (points, line) {
-    const tx = line.p1.x,
-      ty = line.p1.y,
-      a = -atan2(line.p2.y - ty, line.p2.x - tx),
-      d = function (v) {
-        return {
-          x: (v.x - tx) * cos(a) - (v.y - ty) * sin(a),
-          y: (v.x - tx) * sin(a) + (v.y - ty) * cos(a),
-        };
+  align(points: { x: number; y: number }[], line: { p1: { x: number; y: number }; p2: { x: number; y: number } }) {
+    const tx = line.p1.x;
+    const ty = line.p1.y;
+    const a = -atan2(line.p2.y - ty, line.p2.x - tx);
+    const d = function (v) {
+      return {
+        x: (v.x - tx) * cos(a) - (v.y - ty) * sin(a),
+        y: (v.x - tx) * sin(a) + (v.y - ty) * cos(a),
       };
+    };
     return points.map(d);
   },
 

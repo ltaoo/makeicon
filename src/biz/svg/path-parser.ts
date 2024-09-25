@@ -1,4 +1,4 @@
-import { CurveLikeCircleRatio } from "@/biz/path_point/utils";
+import { CurveLikeCircleRatio } from "@/biz/bezier_point/utils";
 
 const kCommandTypeRegex = /^[\t\n\f\r ]*([MLHVZCSQTAmlhvzcsqta])[\t\n\f\r ]*/;
 const kFlagRegex = /^[01]/;

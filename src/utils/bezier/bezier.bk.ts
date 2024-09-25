@@ -16,83 +16,91 @@ const pi = Math.PI;
 // a zero coordinate, which is surprisingly useful
 const ZERO = { x: 0, y: 0, z: 0 };
 
+type CoordPos = { x: number; y: number; z?: number };
 /**
  * Bezier curve constructor.
  *
  * ...docs pending...
  */
 class Bezier {
-  points: BezierPoint[] = [];
-  // dpoints: { t: number; x: number; y: number; z?: number }[][] = [];
-  // dims: ("x" | "y" | "z")[] = ["x", "y"];
-  // dimlen = 2;
-  /** 2 linear   3 curves */
-  // order = 2 | 3;
+  points: CoordPos[] = [];
+  dpoints: { t: number; x: number; y: number }[][] = [];
+  dims: ("x" | "y" | "z")[] = ["x", "y"];
+  dimlen = 2;
+  /** points.length - 1 即 points 的个数 */
+  order = 2 | 3;
+  ratios: number[] = [];
+  clockwise = false;
   // ratios: number[] = [];
   /** 是否是直线 */
   _linear?: boolean;
   /** 是否是 3D */
-  _3d?: boolean;
-  // _t1: number;
-  // _t2: number;
-  // _lut: BezierPoint[] = [];
+  _3d = false;
+  _t1: number;
+  _t2: number;
+  _lut: (CoordPos & { t: number })[] = [];
+  _print: string = "";
 
-  constructor(coords) {
-    // let args = coords && coords.forEach ? coords : Array.from(arguments).slice();
-    const args = coords;
-    let coordlen = false;
-
-    if (typeof args[0] === "object") {
-      coordlen = args.length;
-      //   const newargs = [];
-      //   args.forEach(function (point) {
-      //     ["x", "y", "z"].forEach(function (d) {
-      //       if (typeof point[d] !== "undefined") {
-      //         newargs.push(point[d]);
-      //       }
-      //     });
-      //   });
-      //   args = newargs;
-    }
+  constructor(coords: CoordPos[] | number[]) {
+    let coordlen = 0;
+    const args = (() => {
+      if (typeof coords[0] === "object") {
+        coordlen = coords.length;
+        const newargs: number[] = [];
+        coords.forEach(function (point) {
+          ["x", "y", "z"].forEach(function (d) {
+            if (typeof point[d] !== "undefined") {
+              newargs.push(point[d]);
+            }
+          });
+        });
+        return newargs;
+      }
+      return coords as number[];
+    })();
 
     let higher = false;
     const len = args.length;
 
-    // if (coordlen) {
-    //   if (coordlen > 4) {
-    //     if (arguments.length !== 1) {
-    //       throw new Error("Only new Bezier(point[]) is accepted for 4th and higher order curves");
-    //     }
-    //     higher = true;
-    //   }
-    // } else {
-    //   if (len !== 6 && len !== 8 && len !== 9 && len !== 12) {
-    //     if (arguments.length !== 1) {
-    //       throw new Error("Only new Bezier(point[]) is accepted for 4th and higher order curves");
-    //     }
-    //   }
-    // }
-
-    const _3d = (this._3d =
-      (!higher && (len === 9 || len === 12)) || (coords && coords[0] && typeof coords[0].z !== "undefined"));
-
-    const points = args;
+    if (coordlen) {
+      if (coordlen > 4) {
+        if (arguments.length !== 1) {
+          throw new Error("Only new Bezier(point[]) is accepted for 4th and higher order curves");
+        }
+        higher = true;
+      }
+    } else {
+      if (len !== 6 && len !== 8 && len !== 9 && len !== 12) {
+        if (arguments.length !== 1) {
+          throw new Error("Only new Bezier(point[]) is accepted for 4th and higher order curves");
+        }
+      }
+    }
+    let _3d = !!(!higher && (len === 9 || len === 12));
+    if (coords && coords[0] && typeof coords[0].z !== "undefined") {
+      _3d = true;
+    }
+    this._3d = _3d;
+    const points = [];
+    for (let idx = 0, step = _3d ? 3 : 2; idx < len; idx += step) {
+      var point: { x: number; y: number; z?: number } = {
+        x: args[idx],
+        y: args[idx + 1],
+      };
+      if (_3d) {
+        point.z = args[idx + 2];
+      }
+      points.push(point);
+    }
     this.points = points;
-    console.log('after this.ponits i ', coords, points)
-    // for (let idx = 0, step = _3d ? 3 : 2; idx < len; idx += step) {
-    //   var point = {
-    //     x: args[idx],
-    //     y: args[idx + 1],
-    //   };
-    //   if (_3d) {
-    //     point.z = args[idx + 2];
-    //   }
-    //   points.push(point);
-    // }
-    const order = (this.order = points.length - 1);
+    const order = points.length - 1;
+    this.order = order;
 
-    const dims = (this.dims = ["x", "y"]);
-    if (_3d) dims.push("z");
+    const dims = ["x", "y"] as ("x" | "y" | "z")[];
+    this.dims = dims;
+    if (_3d) {
+      dims.push("z");
+    }
     this.dimlen = dims.length;
 
     // is this curve, practically speaking, a straight line?
@@ -105,24 +113,22 @@ class Bezier {
     this._t2 = 1;
     this.update();
   }
-
-  static quadraticFromPoints(p1, p2, p3, t) {
+  static quadraticFromPoints(p1: CoordPos, p2: CoordPos, p3: CoordPos, t: number) {
     if (typeof t === "undefined") {
       t = 0.5;
     }
     // shortcuts, although they're really dumb
     if (t === 0) {
-      return new Bezier(p2, p2, p3);
+      return new Bezier([p2, p2, p3]);
     }
     if (t === 1) {
-      return new Bezier(p1, p2, p2);
+      return new Bezier([p1, p2, p2]);
     }
     // real fitting.
     const abc = Bezier.getABC(2, p1, p2, p3, t);
-    return new Bezier(p1, abc.A, p3);
+    return new Bezier([p1, abc.A, p3]);
   }
-
-  static cubicFromPoints(S, B, E, t, d1) {
+  static cubicFromPoints(S: CoordPos, B: CoordPos, E: CoordPos, t: number, d1: number) {
     if (typeof t === "undefined") {
       t = 0.5;
     }
@@ -151,50 +157,26 @@ class Bezier {
         y: E.y + (v2.y - E.y) / (1 - t),
       };
     // ...done
-    return new Bezier(S, nc1, nc2, E);
+    return new Bezier([S, nc1, nc2, E]);
   }
-
-  static getUtils() {
-    return utils;
-  }
-
-  getUtils() {
-    return Bezier.getUtils();
-  }
-
   static get PolyBezier() {
     return PolyBezier;
   }
-
-  valueOf() {
-    return this.toString();
+  static getUtils() {
+    return utils;
   }
-
-  toString() {
-    return utils.pointsToString(this.points);
+  getUtils() {
+    return Bezier.getUtils();
   }
-
-  toSVG() {
-    if (this._3d) return false;
-    const p = this.points,
-      x = p[0].x,
-      y = p[0].y,
-      s = ["M", x, y, this.order === 2 ? "Q" : "C"];
-    for (let i = 1, last = p.length; i < last; i++) {
-      s.push(p[i].x);
-      s.push(p[i].y);
-    }
-    return s.join(" ");
-  }
-
-  setRatios(ratios) {
+  /** 设置比例？ */
+  setRatios(ratios: number[]) {
     if (ratios.length !== this.points.length) {
       throw new Error("incorrect number of ratio values");
     }
     this.ratios = ratios;
     this._lut = []; //  invalidate any precomputed LUT
   }
-
+  /** 比较坐标点，如果当前和缓存不一致，就更新一次 */
   verify() {
     const print = this.coordDigest();
     if (print !== this._print) {
@@ -202,7 +184,7 @@ class Bezier {
       this.update();
     }
   }
-
+  /** 坐标点转字符串 */
   coordDigest() {
     return this.points
       .map(function (c, pos) {
@@ -210,25 +192,31 @@ class Bezier {
       })
       .join("");
   }
-
   update() {
     // invalidate any precomputed LUT
     this._lut = [];
     this.dpoints = utils.derive(this.points, this._3d);
     this.computedirection();
   }
-
+  /** 计算曲线顺时针或逆时针 */
   computedirection() {
     const points = this.points;
     const angle = utils.angle(points[0], points[this.order], points[1]);
     this.clockwise = angle > 0;
   }
-
+  /** 计算曲线长度 */
   length() {
     return utils.length(this.derivative.bind(this));
   }
-
-  static getABC(order = 2, S, B, E, t = 0.5) {
+  /**
+   * 获取曲线 A、B、C、Start、End 五个点
+   * B 是曲线上的点，C 是 Start、End 连线上的点，A 是 B、C 连线，且落在 控制点1、2 连线上的点
+   * https://pomax.github.io/bezierinfo/#abc
+   * @param {CoordPos} S 起始点
+   * @param {CoordPos} B 曲线上指定点
+   * @param {CoordPos} E 结束点
+   */
+  static getABC(order = 2, S: CoordPos, B: CoordPos, E: CoordPos, t = 0.5) {
     const u = utils.projectionratio(t, order),
       um = 1 - u,
       C = {
@@ -242,17 +230,19 @@ class Bezier {
       };
     return { A, B, C, S, E };
   }
-
-  getABC(t, B) {
-    B = B || this.get(t);
-    let S = this.points[0];
-    let E = this.points[this.order];
-    return Bezier.getABC(this.order, S, B, E, t);
+  getABC(t: number, B?: CoordPos) {
+    const point = B || this.get(t);
+    const S = this.points[0];
+    const E = this.points[this.order];
+    return Bezier.getABC(this.order, S, point, E, t);
   }
-
-  getLUT(steps) {
+  /**
+   * 在曲线上按间隔获取 steps 个点
+   * @param steps
+   * @returns
+   */
+  getLUT(steps = 100) {
     this.verify();
-    steps = steps || 100;
     if (this._lut.length === steps + 1) {
       return this._lut;
     }
@@ -268,28 +258,33 @@ class Bezier {
     }
     return this._lut;
   }
-
-  on(point, error) {
+  on(point: CoordPos, error: number) {
     error = error || 5;
-    const lut = this.getLUT(),
-      hits = [];
-    for (let i = 0, c, t = 0; i < lut.length; i++) {
+    const lut = this.getLUT();
+    const hits = [];
+    let c;
+    let t = 0;
+    for (let i = 0; i < lut.length; i++) {
       c = lut[i];
       if (utils.dist(c, point) < error) {
         hits.push(c);
         t += i / lut.length;
       }
     }
-    if (!hits.length) return false;
+    if (!hits.length) {
+      return false;
+    }
     return (t /= hits.length);
   }
-
-  project(point) {
+  /**
+   *
+   */
+  project(point: CoordPos) {
     // step 1: coarse check
     const LUT = this.getLUT(),
       l = LUT.length - 1,
       closest = utils.closest(LUT, point),
-      mpos = closest.mpos,
+      mpos = closest.mpos!,
       t1 = (mpos - 1) / l,
       t2 = (mpos + 1) / l,
       step = 0.1 / l;
@@ -314,22 +309,21 @@ class Bezier {
     p.d = mdist;
     return p;
   }
-
-  get(t) {
+  /** 通过 t 获取指定点坐标 */
+  get(t: number) {
     return this.compute(t);
   }
-
-  point(idx) {
+  /** 通过下标获取指定点坐标 */
+  point(idx: number) {
     return this.points[idx];
   }
-
-  compute(t) {
+  /** 通过 t 获取指定点坐标 */
+  compute(t: number) {
     if (this.ratios) {
       return utils.computeWithRatios(t, this.points, this.ratios, this._3d);
     }
     return utils.compute(t, this.points, this._3d, this.ratios);
   }
-
   raise() {
     const p = this.points,
       np = [p[0]],
@@ -345,39 +339,32 @@ class Bezier {
     np[k] = p[k - 1];
     return new Bezier(np);
   }
-
-  derivative(t) {
+  derivative(t: number) {
     return utils.compute(t, this.dpoints[0], this._3d);
   }
-
-  dderivative(t) {
+  dderivative(t: number) {
     return utils.compute(t, this.dpoints[1], this._3d);
   }
-
   align() {
     let p = this.points;
     return new Bezier(utils.align(p, { p1: p[0], p2: p[p.length - 1] }));
   }
-
-  curvature(t) {
-    return utils.curvature(t, this.dpoints[0], this.dpoints[1], this._3d);
+  curvature(t: number) {
+    return utils.curvature(t, this.dpoints[0], this.dpoints[1], this._3d, false);
   }
-
   inflections() {
     return utils.inflections(this.points);
   }
-
-  normal(t) {
+  /** 法向量？ */
+  normal(t: number) {
     return this._3d ? this.__normal3(t) : this.__normal2(t);
   }
-
-  __normal2(t) {
+  __normal2(t: number) {
     const d = this.derivative(t);
     const q = sqrt(d.x * d.x + d.y * d.y);
     return { t, x: -d.y / q, y: d.x / q };
   }
-
-  __normal3(t) {
+  __normal3(t: number) {
     // see http://stackoverflow.com/questions/25453159
     const r1 = this.derivative(t),
       r2 = this.derivative(t + 0.01),
@@ -420,8 +407,7 @@ class Bezier {
     };
     return n;
   }
-
-  hull(t) {
+  hull(t: number) {
     let p = this.points,
       _p = [],
       q = [],
@@ -444,16 +430,19 @@ class Bezier {
     }
     return q;
   }
-
-  split(t1, t2) {
+  /**
+   * 将曲线从 t1 到 t2 切割出来
+   */
+  split(t1: number, t2?: number): Bezier {
     // shortcuts
     if (t1 === 0 && !!t2) {
+      // @ts-ignore
       return this.split(t2).left;
     }
     if (t2 === 1) {
+      // @ts-ignore
       return this.split(t1).right;
     }
-
     // no shortcut: use "de Casteljau" iteration.
     const q = this.hull(t1);
     const result = {
@@ -461,25 +450,28 @@ class Bezier {
       right: this.order === 2 ? new Bezier([q[5], q[4], q[2]]) : new Bezier([q[9], q[8], q[6], q[3]]),
       span: q,
     };
-
     // make sure we bind _t1/_t2 information!
     result.left._t1 = utils.map(0, 0, 1, this._t1, this._t2);
     result.left._t2 = utils.map(t1, 0, 1, this._t1, this._t2);
     result.right._t1 = utils.map(t1, 0, 1, this._t1, this._t2);
     result.right._t2 = utils.map(1, 0, 1, this._t1, this._t2);
-
     // if we have no t2, we're done
     if (!t2) {
       return result;
     }
-
     // if we have a t2, split again:
     t2 = utils.map(t2, t1, 1, 0, 1);
+    // @ts-ignore
     return result.right.split(t2).left;
   }
-
+  /**
+   * 获取指定方向上的 t？
+   */
   extrema() {
-    const result = {};
+    const result: {
+      x: number[];
+      y: number[];
+    } = {};
     let roots = [];
     this.dims.forEach(
       function (dim) {
@@ -498,17 +490,18 @@ class Bezier {
         roots = roots.concat(result[dim].sort(utils.numberSort));
       }.bind(this)
     );
-
     result.values = roots.sort(utils.numberSort).filter(function (v, idx) {
       return roots.indexOf(v) === idx;
     });
-
     return result;
   }
-
-  bbox(): { x: { min: number; max: number; size: number }; y: { min: number; max: number; size: number } } {
-    const extrema = this.extrema(),
-      result = {};
+  bbox() {
+    const extrema = this.extrema();
+    console.log("extrema", extrema);
+    const result: {
+      x: number;
+      y: number;
+    } = {};
     this.dims.forEach(
       function (d) {
         result[d] = utils.getminmax(this, d, extrema[d]);
@@ -516,14 +509,13 @@ class Bezier {
     );
     return result;
   }
-
-  overlaps(curve) {
+  overlaps(curve: Bezier) {
     const lbbox = this.bbox(),
       tbbox = curve.bbox();
     return utils.bboxoverlap(lbbox, tbbox);
   }
-
-  offset(t, d) {
+  /** 获取曲线指定点的平移距离 */
+  offset(t: number, d: number) {
     if (typeof d !== "undefined") {
       const c = this.get(t),
         n = this.normal(t);
@@ -559,12 +551,14 @@ class Bezier {
       return s.scale(t);
     });
   }
-
   simple() {
+    /** 三次贝塞尔 */
     if (this.order === 3) {
       const a1 = utils.angle(this.points[0], this.points[3], this.points[1]);
       const a2 = utils.angle(this.points[0], this.points[3], this.points[2]);
-      if ((a1 > 0 && a2 < 0) || (a1 < 0 && a2 > 0)) return false;
+      if ((a1 > 0 && a2 < 0) || (a1 < 0 && a2 > 0)) {
+        return false;
+      }
     }
     const n1 = this.normal(0);
     const n2 = this.normal(1);
@@ -574,7 +568,6 @@ class Bezier {
     }
     return abs(acos(s)) < pi / 3;
   }
-
   reduce() {
     // TODO: examine these var types in more detail...
     let i,
@@ -633,13 +626,11 @@ class Bezier {
     });
     return pass2;
   }
-
+  /** 移动曲线 */
   translate(v, d1, d2) {
     d2 = typeof d2 === "number" ? d2 : d1;
-
     // TODO: make this take curves with control points outside
     //       of the start-end interval into account
-
     const o = this.order;
     let d = this.points.map((_, i) => (1 - i / o) * d1 + (i / o) * d2);
     return new Bezier(
@@ -649,10 +640,10 @@ class Bezier {
       }))
     );
   }
-
-  scale(d) {
+  /** 缩放曲线 */
+  scale(d: Function) {
     const order = this.order;
-    let distanceFn = false;
+    let distanceFn: boolean | Function = false;
     if (typeof d === "function") {
       distanceFn = d;
     }
@@ -672,13 +663,11 @@ class Bezier {
     const r1 = distanceFn ? distanceFn(0) : d;
     const r2 = distanceFn ? distanceFn(1) : d;
     const v = [this.offset(0, 10), this.offset(1, 10)];
-    const np = [];
+    const np: CoordPos[] = [];
     const o = utils.lli4(v[0], v[0].c, v[1], v[1].c);
-
     if (!o) {
       throw new Error("cannot scale this curve. Try reducing it first.");
     }
-
     // move all points by distance 'd' wrt the origin 'o',
     // and move end points by fixed distance along normal.
     [0, 1].forEach(function (t) {
@@ -699,7 +688,6 @@ class Bezier {
       });
       return new Bezier(np);
     }
-
     // move control points by "however much necessary to
     // ensure the correct tangent to endpoint".
     [0, 1].forEach(function (t) {
@@ -721,14 +709,14 @@ class Bezier {
     });
     return new Bezier(np);
   }
-
+  /**
+   * 获取构成曲线描边的 PolyBezier，即多条曲线
+   */
   outline(d1: number, d2?: number, d3?: number, d4?: number) {
     d2 = d2 === undefined ? d1 : d2;
-
     if (this._linear) {
       // TODO: find the actual extrema, because they might
       //       be before the start, or past the end.
-
       const n = this.normal(0);
       const start = this.points[0];
       const end = this.points[this.points.length - 1];
@@ -812,8 +800,10 @@ class Bezier {
 
     return new PolyBezier(segments);
   }
-
-  outlineshapes(d1, d2, curveIntersectionThreshold) {
+  /**
+   * 获取曲线的描边构成的形状曲线
+   */
+  outlineshapes(d1: number, d2?: number, curveIntersectionThreshold: number) {
     d2 = d2 || d1;
     const outline = this.outline(d1, d2).curves;
     const shapes = [];
@@ -825,9 +815,13 @@ class Bezier {
     }
     return shapes;
   }
-
-  intersects(curve, curveIntersectionThreshold?: number) {
-    if (!curve) return this.selfintersects(curveIntersectionThreshold);
+  /**
+   * 获取与指定曲线的相交点
+   */
+  intersects(curve: Bezier | { p1: CoordPos; p2: CoordPos }, curveIntersectionThreshold?: number): number[] {
+    if (!curve) {
+      return this.selfintersects(curveIntersectionThreshold);
+    }
     if (curve.p1 && curve.p2) {
       return this.lineIntersects(curve);
     }
@@ -842,8 +836,10 @@ class Bezier {
     }
     return this.curveintersects(this.reduce(), curve, curveIntersectionThreshold);
   }
-
-  lineIntersects(line) {
+  /**
+   * 获取与指定直线的相交点
+   */
+  lineIntersects(line: { p1: CoordPos; p2: CoordPos }) {
     const mx = min(line.p1.x, line.p2.x),
       my = min(line.p1.y, line.p2.y),
       MX = max(line.p1.x, line.p2.x),
@@ -853,8 +849,10 @@ class Bezier {
       return utils.between(p.x, mx - 1, MX + 1) && utils.between(p.y, my - 1, MY + 1);
     });
   }
-
-  selfintersects(curveIntersectionThreshold) {
+  /**
+   * 获取本曲线自相交的点
+   */
+  selfintersects(curveIntersectionThreshold: number) {
     // "simple" curves cannot intersect with their direct
     // neighbour, so for each segment X we check whether
     // it intersects [0:x-2][x+2:last].
@@ -871,7 +869,6 @@ class Bezier {
     }
     return results;
   }
-
   curveintersects(c1, c2, curveIntersectionThreshold) {
     const pairs = [];
     // step 1: pair off any overlapping segments
@@ -883,7 +880,7 @@ class Bezier {
       });
     });
     // step 2: for each pairing, run through the convergence algorithm.
-    let intersections = [];
+    let intersections: {}[] = [];
     pairs.forEach(function (pair) {
       const result = utils.pairiteration(pair.left, pair.right, curveIntersectionThreshold);
       if (result.length > 0) {
@@ -892,12 +889,13 @@ class Bezier {
     });
     return intersections;
   }
-
-  arcs(errorThreshold) {
+  /**
+   * 曲率？
+   */
+  arcs(errorThreshold: number) {
     errorThreshold = errorThreshold || 0.5;
     return this._iterate(errorThreshold, []);
   }
-
   _error(pc, np1, s, e) {
     const q = (e - s) / 4,
       c1 = this.get(s + q),
@@ -907,8 +905,7 @@ class Bezier {
       d2 = utils.dist(pc, c2);
     return abs(d1 - ref) + abs(d2 - ref);
   }
-
-  _iterate(errorThreshold, circles) {
+  _iterate(errorThreshold: number, circles: {}[]) {
     let t_s = 0,
       t_e = 1,
       safety;
@@ -997,6 +994,26 @@ class Bezier {
       t_s = prev_e;
     } while (t_e < 1);
     return circles;
+  }
+  valueOf() {
+    return this.toString();
+  }
+  toString() {
+    return utils.pointsToString(this.points);
+  }
+  toSVG() {
+    if (this._3d) {
+      return "";
+    }
+    const p = this.points,
+      x = p[0].x,
+      y = p[0].y,
+      s = ["M", x, y, this.order === 2 ? "Q" : "C"];
+    for (let i = 1, last = p.length; i < last; i++) {
+      s.push(p[i].x);
+      s.push(p[i].y);
+    }
+    return s.join(" ");
   }
 }
 

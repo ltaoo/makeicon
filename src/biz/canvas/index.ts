@@ -1,5 +1,5 @@
 import { base, Handler } from "@/domains/base";
-import { CircleCurved, PathPoint, PathPointMirrorTypes } from "@/biz/path_point";
+import { CircleCurved, BezierPoint, BezierPointMirrorTypes } from "@/biz/bezier_point";
 import {
   calculateCircleCenter,
   getSymmetricPoint2,
@@ -10,30 +10,40 @@ import {
   distanceOfPoints,
   arc_to_curve,
   checkIsClockwise,
-} from "@/biz/path_point/utils";
-import { BezierPath, LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/bezier_path";
-import { BezierPoint } from "@/biz/bezier_point";
-import { Path } from "@/biz/path";
+} from "@/biz/bezier_point/utils";
+import { LinePath } from "@/biz/path";
+import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
+import { Point } from "@/biz/point";
+import { Line } from "@/biz/line";
 import { PathParser } from "@/biz/svg/path-parser";
 import { objectToHTML } from "@/utils";
+
+import { CanvasLayer } from "./layer";
+import { Position } from "./types";
+import { CanvasRangeSelection } from "./range";
 
 const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
 export type CursorType = "select" | "pen";
 const debug = false;
+export enum CanvasModes {
+  Default = 1,
+}
 
 type CanvasProps = {
-  paths: Path[];
+  paths: Line[];
 };
 export function Canvas(props: CanvasProps) {
   const { paths } = props;
 
-  let _paths = paths;
-  let _bezier_paths = _paths.reduce((prev, cur) => {
+  let _mounted = false;
+  let _lines = paths;
+  let _paths = _lines.reduce((prev, cur) => {
     return prev.concat(cur.paths);
-  }, [] as BezierPath[]);
-  let _points: BezierPoint[] = [];
-  let _path_points: PathPoint[] = [];
+  }, [] as LinePath[]);
+  let _points: Point[] = [];
+  let _path_points: BezierPoint[] = [];
   let _layers: CanvasLayer[] = [
+    // 最顶上的图层，绘制了网格线
     CanvasLayer({
       index: 1,
       zIndex: 999,
@@ -44,16 +54,18 @@ export function Canvas(props: CanvasProps) {
         });
       },
     }),
+    // 绘制了锚点、路径
     CanvasLayer({
       index: 2,
       zIndex: 99,
     }),
+    // 绘制了填充、描边
     CanvasLayer({
       index: 3,
       zIndex: 9,
     }),
   ];
-  let _mounted = false;
+  const _$selection = CanvasRangeSelection();
   let _cur_layer = _layers[_layers.length - 1];
   /** 按下时的位置 */
   let _mx = 0;
@@ -86,42 +98,56 @@ export function Canvas(props: CanvasProps) {
   /** 两种情况，钢笔工具时，确定了坐标点，开始拖动改变控制点位置；移动工具时，点击了点，开始拖动改变点位置 */
   let _prepare_dragging = false;
   let _moving_for_new_line = false;
+  let _moving_object = false;
   /** 当前是否处于拖动 坐标点或锚点 */
   let _dragging = false;
   let _out_grid = true;
-  /** 之前拖动过的路径点，包含了 坐标点和锚点 */
-  let _prev_path_point: PathPoint | null = null;
-  /** 当前拖动的路径点，包含了 坐标点和锚点 */
-  let _cur_path_point: PathPoint | null = null;
+  /** 之前拖动过的路径点 */
+  let _prev_path_point: BezierPoint | null = null;
+  /** 当前拖动的路径点 */
+  let _cur_path_point: BezierPoint | null = null;
   /** 之前拖动过的点，可能是 锚点、坐标点 */
-  let _prev_point: BezierPoint | null = null;
+  let _prev_point: Point | null = null;
   /** 当前拖动的点，可能是 锚点、坐标点 */
-  let _cur_point: BezierPoint | null = null;
-  let _cur_bezier_path: BezierPath | null = null;
-  let _cur_path: Path = _paths[0];
+  let _cur_point: Point | null = null;
+  let _cur_line_path: LinePath | null = null;
+  let _cur_line: Line = _lines[0];
   // if (!_cur_path) {
   //   _cur_path = Path({});
   //   _paths.push(_cur_path);
   // }
-  /** 当前是否激活钢笔工具 */
-  let _pen_editing = 0;
-  /** 当前是否激活选择工具 */
-  let _cursor_editing = 1;
+  /** 物体编辑模式/选择工具 */
+  let _global_cursor = 0;
+  /** 路径编辑模式/钢笔工具 */
+  let _editing_pen = 0;
+  /** 路径编辑模式/选择工具 */
+  let _editing_cursor = 1;
+  /** 画布上的图形 */
+  let _objects: {}[] = [];
   let _events: (() => void)[] = [];
   let _debug = false;
 
   const _state = {
+    get mode() {
+      if (_editing_cursor) {
+        return 3;
+      }
+      if (_editing_pen) {
+        return 2;
+      }
+      return 1;
+    },
     get cursor(): CursorType {
-      if (_cursor_editing) {
+      if (_editing_cursor) {
         return "select";
       }
-      if (_pen_editing) {
+      if (_editing_pen) {
         return "pen";
       }
       return "select";
     },
     get pen() {
-      return _pen_editing;
+      return _editing_pen;
     },
   };
 
@@ -167,10 +193,10 @@ export function Canvas(props: CanvasProps) {
     return false;
   }
   function updatePoints() {
-    const points: BezierPoint[] = [];
-    const path_points: PathPoint[] = [];
-    for (let i = 0; i < _bezier_paths.length; i += 1) {
-      const path = _bezier_paths[i];
+    const points: Point[] = [];
+    const path_points: BezierPoint[] = [];
+    for (let i = 0; i < _paths.length; i += 1) {
+      const path = _paths[i];
       points.push(...path.points);
       path_points.push(...path.path_points);
     }
@@ -186,6 +212,7 @@ export function Canvas(props: CanvasProps) {
     get layers() {
       return _layers;
     },
+    $selection: _$selection,
     createLayer() {},
     appendLayer(layer: CanvasLayer) {
       if (_layers.includes(layer)) {
@@ -252,7 +279,7 @@ export function Canvas(props: CanvasProps) {
       return v + _grid.y;
     },
     translate(pos: { x: number; y: number }) {
-      if (_pen_editing) {
+      if (_editing_pen) {
         return {
           x: pos.x,
           y: pos.y,
@@ -287,37 +314,50 @@ export function Canvas(props: CanvasProps) {
       bus.emit(Events.Update);
     },
     getCurPath() {
-      return _cur_bezier_path;
+      return _cur_line_path;
     },
     selectPen() {
-      _cursor_editing = 0;
-      _pen_editing = 1;
-      _cur_path = Path({
+      _editing_cursor = 0;
+      _editing_pen = 1;
+      _global_cursor = 0;
+      _cur_line = Line({
         fill: {
           color: "#111111",
         },
       });
-      _paths.push(_cur_path);
+      _lines.push(_cur_line);
       bus.emit(Events.Change, { ..._state });
     },
     selectCursor() {
-      if (_pen_editing && _cur_bezier_path) {
-        _cur_bezier_path.removeLastVirtualPoint();
+      if (_editing_pen && _cur_line_path) {
+        _cur_line_path.removeLastVirtualPoint();
       }
-      _pen_editing = 0;
-      _cursor_editing = 1;
+      _editing_pen = 0;
+      _editing_cursor = 1;
+      _global_cursor = 0;
       _cur_path_point = null;
       _cur_point = null;
       updatePoints();
       bus.emit(Events.Update);
       bus.emit(Events.Change, { ..._state });
     },
+    /**
+     * 画布模式
+     * 对画布上的物体进行位置、大小等属性调整
+     */
+    selectObject() {
+      _editing_cursor = 0;
+      _editing_pen = 0;
+      _global_cursor = 1;
+      bus.emit(Events.Update);
+      bus.emit(Events.Change, { ..._state });
+    },
     buildSVGPaths(options: Partial<{ scale: number }> = {}) {
       const { scale } = options;
-      const path_string_arr: (Path["state"] & { d: string })[] = [];
+      const path_string_arr: (Line["state"] & { d: string })[] = [];
       // console.log("[BIZ]canvas/index - buildSVGPaths before for(let i", paths.length);
-      for (let i = 0; i < _paths.length; i += 1) {
-        const path = _paths[i];
+      for (let i = 0; i < _lines.length; i += 1) {
+        const path = _lines[i];
         let d = "";
         // const { outline } = path.buildOutline({ cap: options.cap, scene: 1 });
         // const first = outline[0];
@@ -512,11 +552,11 @@ export function Canvas(props: CanvasProps) {
         text: `${_mx2},${_my2}`,
       };
     },
-    format(paths: Path[]) {
+    format(paths: Line[]) {
       for (let i = 0; i < paths.length; i += 1) {
         const path = paths[i];
         const sub_paths = path.paths;
-        let composite_relative_path: BezierPath | null = null;
+        let composite_relative_path: LinePath | null = null;
         for (let j = 0; j < sub_paths.length; j += 1) {
           const cur_sub_path = sub_paths[j];
           const next_sub_path = sub_paths[j + 1];
@@ -560,17 +600,17 @@ export function Canvas(props: CanvasProps) {
       return paths;
     },
     get paths() {
-      return _paths;
+      return _lines;
     },
     setPaths(
-      paths: Path[],
+      paths: Line[],
       extra: Partial<{ transform: boolean; dimensions: { width: number; height: number } }> = {}
     ) {
       // console.log("[BIZ]canvas/index - setPaths", paths);
-      _paths = this.format(paths);
-      _bezier_paths = _paths.reduce((prev, cur) => {
+      _lines = this.format(paths);
+      _paths = _lines.reduce((prev, cur) => {
         return prev.concat(cur.paths);
-      }, [] as BezierPath[]);
+      }, [] as LinePath[]);
       updatePoints();
       // if (extra.transform) {
       //   for (let i = 0; i < _paths.length; i += 1) {
@@ -615,7 +655,7 @@ export function Canvas(props: CanvasProps) {
         return null;
       }
       const data = PathParser.parse_svg(svg);
-      const paths: Path[] = [];
+      const paths: Line[] = [];
       const { dimensions } = data;
       const xExtra = {
         exp: false,
@@ -627,7 +667,7 @@ export function Canvas(props: CanvasProps) {
         const payload = data.paths[j];
         const content = payload.d;
         const tokens = PathParser.parse(content);
-        const pppp = Path({
+        const pppp = Line({
           fill: payload.fill
             ? {
                 color: payload.fill,
@@ -642,486 +682,7 @@ export function Canvas(props: CanvasProps) {
               }
             : null,
         });
-        let composite_relative_path: BezierPath | null = null;
-        let cur_path: BezierPath | null = null;
-        let cur_path_point: PathPoint | null = null;
-        let prev_path_point: PathPoint | null = null;
-        let prev_point = { x: 0, y: 0 };
-        let start_path_point: PathPoint | null = null;
-        let prev_start = { x: 0, y: 0 };
-        function moveTo(p: { x: number; y: number }, extra: Partial<{ is_relative: boolean }> = {}) {
-          p.x += prev_point.x;
-          p.y += prev_point.y;
-        }
-        console.log("tokens", tokens, payload);
-        for (let i = 0; i < tokens.length; i += 1) {
-          const prev = tokens[i - 1];
-          const cur = tokens[i];
-          const next = tokens[i + 1];
-          const [command, ...args] = cur;
-          const values = args.map((v) => Number(v));
-          // console.log("cur command is", command);
-          if (i === tokens.length - 1) {
-            if (cur_path) {
-              if (cur_path.checkIsClosed()) {
-                cur_path.setClosed();
-                const clockwise = checkIsClockwise(cur_path.path_points);
-                cur_path.setClockWise(clockwise);
-                // console.log("check is clockwise", clockwise);
-              }
-            }
-          }
-          if (["M", "m"].includes(command)) {
-            if (cur_path) {
-              if (cur_path.path_points.length === 1) {
-                // 如果路径只有一个 moveTo，就抛弃这个 path
-                //
-              }
-              if (cur_path.checkIsClosed()) {
-                cur_path.setClosed();
-                const clockwise = checkIsClockwise(cur_path.path_points);
-                cur_path.setClockWise(clockwise);
-                // console.log("check is clockwise 2", clockwise);
-              }
-            }
-            let v0 = values[0];
-            let v1 = values[1];
-            let p = {
-              x: this.normalizeX(v0, xExtra),
-              y: this.normalizeY(v1, yExtra),
-            };
-            if (command === "m") {
-              // moveTo(p);
-              p.x += prev_start.x;
-              p.y += prev_start.y;
-              if (i === 0) {
-                p = this.translate(p);
-              }
-            } else {
-              p = this.translate(p);
-            }
-            Object.assign(prev_start, p);
-            // console.log("[BIZ]before new start point", v0, v1, prev_point);
-            prev_point = p;
-            const point = PathPoint({
-              point: BezierPoint(p),
-              from: null,
-              to: null,
-              start: true,
-              virtual: false,
-            });
-            start_path_point = point;
-            cur_path_point = point;
-            const new_path = BezierPath({
-              points: [point],
-            });
-            pppp.append(new_path);
-            if (cur_path) {
-              // const cur_size = new_path.size;
-              // const prev_size = cur_path.size;
-              // console.log("cur size compare with prev_size", cur_size, prev_size);
-              // if (
-              //   cur_size.x > prev_size.x &&
-              //   cur_size.y > prev_size.y &&
-              //   cur_size.x2 < prev_size.x2 &&
-              //   cur_size.y2 < prev_size.y2
-              // ) {
-              //   // 当前这个，在前面那个的里面
-              //   if (cur_path.composite === "source-over") {
-              //     new_path.setComposite("destination-out");
-              //   }
-              //   if (cur_path.composite === "destination-out") {
-              //     composite_relative_path = new_path;
-              //     new_path.setComposite("source-over");
-              //   }
-              // }
-              // // 如果前面那个，在当前这个的里面
-              // if (composite_relative_path) {
-              //   const cur_size = new_path.size;
-              //   const prev_size = composite_relative_path.size;
-              //   if (
-              //     cur_size.x > prev_size.x &&
-              //     cur_size.y > prev_size.y &&
-              //     cur_size.x2 < prev_size.x2 &&
-              //     cur_size.y2 < prev_size.y2
-              //   ) {
-              //     if (composite_relative_path.composite === "source-over") {
-              //       new_path.setComposite("destination-out");
-              //     }
-              //     if (composite_relative_path.composite === "destination-out") {
-              //     }
-              //   }
-              // }
-            }
-            if (i === 0) {
-              composite_relative_path = new_path;
-            }
-            cur_path = new_path;
-          }
-          if (["Z", "z"].includes(command)) {
-            console.log("[BIZ]command is Z", cur_path);
-            if (start_path_point) {
-              start_path_point.setEnd(true);
-              start_path_point.setClosed();
-            }
-            if (cur_path) {
-              cur_path.setClosed();
-              const clockwise = checkIsClockwise(cur_path.path_points);
-              cur_path.setClockWise(clockwise);
-              // console.log("check is clockwise 3", clockwise);
-            }
-            // cur_path.setClosed();
-          }
-          if (next && cur_path) {
-            const [next_command, ...next_args] = next;
-            const next_values = next_args.map((v) => Number(v));
-            // console.log("next command is", next_command);
-            if (["A", "a"].includes(next_command)) {
-              const [rx, ry, rotate, t1, t2, x, y] = next_values;
-              // @todo 这里是默认必定是圆形，但也可能是椭圆，后面支持吧。
-              let p1 = { ...prev_point };
-              let p2 = { x: this.normalizeX(x, xExtra), y: this.normalizeY(y, yExtra) };
-              let radius = this.normalizeX(rx, xExtra);
-              if (next_command === "a") {
-                moveTo(p2);
-              } else {
-                p2 = this.translate(p2);
-              }
-              prev_point = p2;
-              const start = p1;
-              const arc = {
-                rx: radius,
-                ry: radius,
-                rotate,
-                t1,
-                t2,
-                end: p2,
-              };
-              console.log("[BIZ]canvas / before arc_to_curve", start, arc);
-              const pointsArr = arc_to_curve(start, arc);
-              console.log("after arc_to_curve", start, pointsArr);
-              let inner_cur_path_point: PathPoint | null = null;
-              for (let k = 0; k < pointsArr.length; k += 1) {
-                const inner_cur = pointsArr[k];
-                // console.log("inner_cur", inner_cur);
-                const inner_next = pointsArr[k + 1];
-                if (cur_path_point) {
-                  cur_path_point.setTo(BezierPoint(inner_cur[1]));
-                  cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
-                  // if (cur_path_point.start) {
-                  // }
-                  // if (cur_path_point.from) {
-                  //   cur_path_point.setTo(BezierPoint(inner_cur[1]));
-                  // }
-                }
-                if (inner_cur_path_point && inner_cur_path_point.from) {
-                  inner_cur_path_point.setTo(BezierPoint(inner_cur[1]));
-                  inner_cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
-                }
-                const new_cur_path_point = PathPoint({
-                  point: BezierPoint(inner_cur[3]),
-                  from: BezierPoint(inner_cur[2]),
-                  to: inner_next ? BezierPoint(inner_next[1]) : null,
-                  mirror: inner_next ? PathPointMirrorTypes.MirrorAngleAndLength : null,
-                  virtual: false,
-                });
-                cur_path_point = new_cur_path_point;
-                inner_cur_path_point = new_cur_path_point;
-                cur_path.appendPoint(new_cur_path_point);
-              }
-
-              // const is_reverse = p1.x > p2.x;
-              // const distance = distanceOfPoints(p1, p2);
-              // if (radius < distance / 2) {
-              //   radius = distance / 2;
-              // }
-              // const centers = calculateCircleCenter(p1, p2, radius);
-              // if (centers) {
-              //   const [index1, index2] = (() => {
-              //     if (t1 === 0 && t2 === 0) {
-              //       return [0, 1];
-              //     }
-              //     if (t1 === 0 && t2 === 1) {
-              //       return [1, 0];
-              //     }
-              //     if (t1 === 1 && t2 === 0) {
-              //       return [1, 1];
-              //     }
-              //     if (t1 === 1 && t2 === 1) {
-              //       return [0, 0];
-              //     }
-              //     return [0, 1];
-              //   })();
-              //   const center = centers[index1];
-              //   const arcs = calculateCircleArcs(center, p1, p2);
-              //   const arc = arcs[index2];
-              //   // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
-              //   const circle: CircleCurved = {
-              //     center,
-              //     radius,
-              //     arc,
-              //     counterclockwise: (() => {
-              //       if (t1 === 0 && t2 === 0) {
-              //         // if (is_reverse) {
-              //         return true;
-              //         // }
-              //       }
-              //       // if (t1 === 0 && t2 === 1) {
-              //       //   return false;
-              //       // }
-              //       if (t1 === 1 && t2 === 0) {
-              //         if (is_reverse) {
-              //           return true;
-              //         }
-              //       }
-              //       // if (t1 === 1 && t2 === 1) {
-              //       // }
-              //       return false;
-              //     })(),
-              //     extra: { start: p1, rx, ry, rotate, t1, t2 },
-              //   };
-              //   // console.log("create point", next_command, next_values, p2, circle);
-              //   const next_path_point = PathPoint({
-              //     point: BezierPoint(p2),
-              //     from: null,
-              //     to: null,
-              //     circle,
-              //     virtual: false,
-              //   });
-              //   cur_path_point = next_path_point;
-              //   cur_path.appendPoint(next_path_point);
-              // }
-            }
-            if (["L", "l"].includes(next_command)) {
-              let v0 = next_values[0];
-              let v1 = next_values[1];
-              let p = {
-                x: this.normalizeX(v0, xExtra),
-                y: this.normalizeY(v1, xExtra),
-              };
-              if (["l"].includes(next_command)) {
-                // p = {
-                //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
-                //   y: this.normalizeY(v1, { ...xExtra, pureValue: true }),
-                // };
-                moveTo(p);
-              } else {
-                p = this.translate(p);
-              }
-              prev_point = p;
-              // console.log("create point", next_command, next, next_values, p);
-              const next_path_point = PathPoint({
-                point: BezierPoint(p),
-                from: null,
-                to: null,
-                virtual: false,
-              });
-              cur_path_point = next_path_point;
-              cur_path.appendPoint(next_path_point);
-            }
-            if (["V", "v", "H", "h"].includes(next_command)) {
-              let distance = (() => {
-                const v = next_values[0];
-                if (["H", "h"].includes(next_command)) {
-                  return this.normalizeX(v, xExtra);
-                }
-                if (["V", "v"].includes(next_command)) {
-                  return this.normalizeY(v, yExtra);
-                }
-                return v;
-              })();
-              let p = {
-                x: 0,
-                y: 0,
-              };
-              if (next_command === "H") {
-                p.x = this.translateX(distance);
-                p.y = prev_point.y;
-                // p = this.translate(p);
-              }
-              if (next_command === "V") {
-                p.x = prev_point.x;
-                p.y = this.translateY(distance);
-                // p = this.translate(p);
-              }
-              if (next_command === "h") {
-                distance += prev_point.x;
-                // p.x = this.translateX(distance);
-                p.x = distance;
-                p.y = prev_point.y;
-              }
-              if (next_command === "v") {
-                distance += prev_point.y;
-                p.x = prev_point.x;
-                // p.y = this.translateX(distance);
-                p.y = distance;
-              }
-              prev_point = p;
-              // console.log("create point", next_command, next, next_values, p);
-              const next_path_point = PathPoint({
-                point: BezierPoint(p),
-                from: null,
-                to: null,
-                virtual: false,
-              });
-              cur_path_point = next_path_point;
-              cur_path.appendPoint(next_path_point);
-            }
-            if (["C", "c"].includes(next_command)) {
-              let v0 = next_values[0];
-              let v1 = next_values[1];
-              let v2 = next_values[2];
-              let v3 = next_values[3];
-              let v4 = next_values[4];
-              let v5 = next_values[5];
-              let a1 = {
-                x: this.normalizeX(v0, xExtra),
-                y: this.normalizeY(v1, yExtra),
-              };
-              let a2 = {
-                x: this.normalizeX(v4, xExtra),
-                y: this.normalizeY(v5, yExtra),
-              };
-              let a3 = {
-                x: this.normalizeX(v2, xExtra),
-                y: this.normalizeY(v3, yExtra),
-              };
-              if (["c"].includes(next_command)) {
-                moveTo(a1);
-                moveTo(a2);
-                moveTo(a3);
-              } else {
-                a1 = this.translate(a1);
-                a2 = this.translate(a2);
-                a3 = this.translate(a3);
-              }
-              prev_point = a2;
-              if (cur_path_point) {
-                // 这里 cur_path_point 其实是 prev_path_point ？？？
-                cur_path_point.setTo(BezierPoint(a1));
-                if (cur_path_point.from) {
-                  const collinear = isCollinear(cur_path_point.from.pos, cur_path_point.point.pos, a1);
-                  cur_path_point.setMirror(PathPointMirrorTypes.NoMirror);
-                  if (collinear.collinear) {
-                    cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngle);
-                    if (collinear.midpoint) {
-                      cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
-                    }
-                  }
-                }
-              }
-              // console.log("create point", next_command, a2);
-              const next_path_point = PathPoint({
-                point: BezierPoint(a2),
-                from: BezierPoint(a3),
-                to: null,
-                virtual: false,
-              });
-              cur_path_point = next_path_point;
-              cur_path.appendPoint(next_path_point);
-            }
-            if (["S", "s"].includes(next_command)) {
-              // console.log("command S or s", !!cur_path_point, !!cur_path_point?.from, next_values);
-              if (cur_path_point && cur_path_point.from) {
-                let v0 = next_values[0];
-                let v1 = next_values[1];
-                let v2 = next_values[2];
-                let v3 = next_values[3];
-                let a2 = {
-                  x: this.normalizeX(v0, xExtra),
-                  y: this.normalizeY(v1, yExtra),
-                };
-                let a3 = {
-                  x: this.normalizeX(v2, xExtra),
-                  y: this.normalizeY(v3, yExtra),
-                };
-                if (["s"].includes(next_command)) {
-                  moveTo(a2);
-                  moveTo(a3);
-                } else {
-                  a2 = this.translate(a2);
-                  a3 = this.translate(a3);
-                }
-                prev_point = a3;
-                const a1 = findSymmetricPoint(cur_path_point.point.pos, cur_path_point.from.pos);
-                cur_path_point.setTo(BezierPoint(a1));
-                cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
-                // console.log("before create next_path_point", a2, a3);
-                const next_path_point = PathPoint({
-                  point: BezierPoint({ x: a3.x, y: a3.y }),
-                  from: BezierPoint({ x: a2.x, y: a2.y }),
-                  to: null,
-                  virtual: false,
-                });
-                cur_path_point = next_path_point;
-                cur_path.appendPoint(next_path_point);
-              }
-            }
-            if (["Q", "q"].includes(next_command)) {
-              const v0 = next_values[0];
-              const v1 = next_values[1];
-              const v2 = next_values[2];
-              const v3 = next_values[3];
-              let a1 = {
-                x: this.normalizeX(v0, xExtra),
-                y: this.normalizeY(v1, yExtra),
-              };
-              let a2 = {
-                x: this.normalizeX(v2, xExtra),
-                y: this.normalizeY(v3, yExtra),
-              };
-              if (["q"].includes(next_command)) {
-                moveTo(a1);
-                moveTo(a2);
-              } else {
-                a1 = this.translate(a1);
-                a2 = this.translate(a2);
-              }
-              prev_point = a2;
-              const next_path_point = PathPoint({
-                point: BezierPoint(a2),
-                from: BezierPoint(a1),
-                to: null,
-                virtual: false,
-              });
-              cur_path_point = next_path_point;
-              cur_path.appendPoint(next_path_point);
-            }
-            if (["T", "t"].includes(next_command)) {
-              const v0 = next_values[0];
-              const v1 = next_values[1];
-              let a2 = {
-                x: this.normalizeX(v0, xExtra),
-                y: this.normalizeY(v1, yExtra),
-              };
-              if (["t"].includes(next_command)) {
-                moveTo(a2);
-              } else {
-                a2 = this.translate(a2);
-              }
-              prev_point = a2;
-              if (cur_path_point && cur_path_point.from) {
-                // const a1 = getSymmetricPoints(cur_path_point.point.pos, cur_path_point.from.pos);
-                const prev_x = cur_path_point.point.pos.x;
-                const prev_from_x = cur_path_point.from.pos.x;
-                const prev_y = cur_path_point.point.pos.y;
-                const prev_from_y = cur_path_point.from.pos.y;
-                const a1 = {
-                  x: prev_x + (prev_x - prev_from_x),
-                  y: prev_y + (prev_y - prev_from_y),
-                };
-                const next_path_point = PathPoint({
-                  point: BezierPoint(a2),
-                  from: BezierPoint(a1),
-                  to: null,
-                  virtual: false,
-                });
-                cur_path_point = next_path_point;
-                cur_path.appendPoint(next_path_point);
-              }
-            }
-          }
-        }
+        this.buildPath(pppp, tokens, xExtra);
         paths.push(pppp);
       }
       return {
@@ -1129,25 +690,540 @@ export function Canvas(props: CanvasProps) {
         dimensions: data.dimensions,
       };
     },
+    buildPath(path: Line, tokens: string[][], xExtra: { exp: boolean; scale: number }) {
+      const yExtra = xExtra;
+
+      let composite_relative_path: LinePath | null = null;
+      let cur_path: LinePath | null = null;
+      let cur_path_point: BezierPoint | null = null;
+      let prev_path_point: BezierPoint | null = null;
+      let prev_point = { x: 0, y: 0 };
+      let start_path_point: BezierPoint | null = null;
+      let prev_start = { x: 0, y: 0 };
+      function moveTo(p: { x: number; y: number }, extra: Partial<{ is_relative: boolean }> = {}) {
+        p.x += prev_point.x;
+        p.y += prev_point.y;
+      }
+      // console.log("tokens", tokens, payload);
+      for (let i = 0; i < tokens.length; i += 1) {
+        const prev = tokens[i - 1];
+        const cur = tokens[i];
+        const next = tokens[i + 1];
+        const [command, ...args] = cur;
+        const values = args.map((v) => Number(v));
+        // console.log("cur command is", command);
+        if (i === tokens.length - 1) {
+          if (cur_path) {
+            if (cur_path.checkIsClosed()) {
+              cur_path.setClosed();
+              const clockwise = checkIsClockwise(cur_path.path_points);
+              cur_path.setClockWise(clockwise);
+              // console.log("check is clockwise", clockwise);
+            }
+          }
+        }
+        if (["M", "m"].includes(command)) {
+          if (cur_path) {
+            if (cur_path.path_points.length === 1) {
+              // 如果路径只有一个 moveTo，就抛弃这个 path
+              //
+            }
+            if (cur_path.checkIsClosed()) {
+              cur_path.setClosed();
+              const clockwise = checkIsClockwise(cur_path.path_points);
+              cur_path.setClockWise(clockwise);
+              // console.log("check is clockwise 2", clockwise);
+            }
+          }
+          let v0 = values[0];
+          let v1 = values[1];
+          let p = {
+            x: this.normalizeX(v0, xExtra),
+            y: this.normalizeY(v1, yExtra),
+          };
+          if (command === "m") {
+            // moveTo(p);
+            p.x += prev_start.x;
+            p.y += prev_start.y;
+            if (i === 0) {
+              p = this.translate(p);
+            }
+          } else {
+            p = this.translate(p);
+          }
+          Object.assign(prev_start, p);
+          // console.log("[BIZ]before new start point", v0, v1, prev_point);
+          prev_point = p;
+          const point = BezierPoint({
+            point: Point(p),
+            from: null,
+            to: null,
+            start: true,
+            virtual: false,
+          });
+          start_path_point = point;
+          cur_path_point = point;
+          const new_path = LinePath({
+            points: [point],
+          });
+          path.append(new_path);
+          if (cur_path) {
+            // const cur_size = new_path.size;
+            // const prev_size = cur_path.size;
+            // console.log("cur size compare with prev_size", cur_size, prev_size);
+            // if (
+            //   cur_size.x > prev_size.x &&
+            //   cur_size.y > prev_size.y &&
+            //   cur_size.x2 < prev_size.x2 &&
+            //   cur_size.y2 < prev_size.y2
+            // ) {
+            //   // 当前这个，在前面那个的里面
+            //   if (cur_path.composite === "source-over") {
+            //     new_path.setComposite("destination-out");
+            //   }
+            //   if (cur_path.composite === "destination-out") {
+            //     composite_relative_path = new_path;
+            //     new_path.setComposite("source-over");
+            //   }
+            // }
+            // // 如果前面那个，在当前这个的里面
+            // if (composite_relative_path) {
+            //   const cur_size = new_path.size;
+            //   const prev_size = composite_relative_path.size;
+            //   if (
+            //     cur_size.x > prev_size.x &&
+            //     cur_size.y > prev_size.y &&
+            //     cur_size.x2 < prev_size.x2 &&
+            //     cur_size.y2 < prev_size.y2
+            //   ) {
+            //     if (composite_relative_path.composite === "source-over") {
+            //       new_path.setComposite("destination-out");
+            //     }
+            //     if (composite_relative_path.composite === "destination-out") {
+            //     }
+            //   }
+            // }
+          }
+          if (i === 0) {
+            composite_relative_path = new_path;
+          }
+          cur_path = new_path;
+        }
+        if (["Z", "z"].includes(command)) {
+          console.log("[BIZ]command is Z", cur_path);
+          if (start_path_point) {
+            start_path_point.setEnd(true);
+            start_path_point.setClosed();
+          }
+          if (cur_path) {
+            cur_path.setClosed();
+            const clockwise = checkIsClockwise(cur_path.path_points);
+            cur_path.setClockWise(clockwise);
+            // console.log("check is clockwise 3", clockwise);
+          }
+          // cur_path.setClosed();
+        }
+        if (next && cur_path) {
+          const [next_command, ...next_args] = next;
+          const next_values = next_args.map((v) => Number(v));
+          // console.log("next command is", next_command);
+          if (["A", "a"].includes(next_command)) {
+            const [rx, ry, rotate, t1, t2, x, y] = next_values;
+            // @todo 这里是默认必定是圆形，但也可能是椭圆，后面支持吧。
+            let p1 = { ...prev_point };
+            let p2 = { x: this.normalizeX(x, xExtra), y: this.normalizeY(y, yExtra) };
+            let radius = this.normalizeX(rx, xExtra);
+            if (next_command === "a") {
+              moveTo(p2);
+            } else {
+              p2 = this.translate(p2);
+            }
+            prev_point = p2;
+            const start = p1;
+            const arc = {
+              rx: radius,
+              ry: radius,
+              rotate,
+              t1,
+              t2,
+              end: p2,
+            };
+            console.log("[BIZ]canvas / before arc_to_curve", start, arc);
+            const pointsArr = arc_to_curve(start, arc);
+            console.log("after arc_to_curve", start, pointsArr);
+            let inner_cur_path_point: BezierPoint | null = null;
+            for (let k = 0; k < pointsArr.length; k += 1) {
+              const inner_cur = pointsArr[k];
+              // console.log("inner_cur", inner_cur);
+              const inner_next = pointsArr[k + 1];
+              if (cur_path_point) {
+                cur_path_point.setTo(Point(inner_cur[1]));
+                cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
+                // if (cur_path_point.start) {
+                // }
+                // if (cur_path_point.from) {
+                //   cur_path_point.setTo(BezierPoint(inner_cur[1]));
+                // }
+              }
+              if (inner_cur_path_point && inner_cur_path_point.from) {
+                inner_cur_path_point.setTo(Point(inner_cur[1]));
+                inner_cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
+              }
+              const new_cur_path_point = BezierPoint({
+                point: Point(inner_cur[3]),
+                from: Point(inner_cur[2]),
+                to: inner_next ? Point(inner_next[1]) : null,
+                mirror: inner_next ? BezierPointMirrorTypes.MirrorAngleAndLength : null,
+                virtual: false,
+              });
+              cur_path_point = new_cur_path_point;
+              inner_cur_path_point = new_cur_path_point;
+              cur_path.appendPoint(new_cur_path_point);
+            }
+
+            // const is_reverse = p1.x > p2.x;
+            // const distance = distanceOfPoints(p1, p2);
+            // if (radius < distance / 2) {
+            //   radius = distance / 2;
+            // }
+            // const centers = calculateCircleCenter(p1, p2, radius);
+            // if (centers) {
+            //   const [index1, index2] = (() => {
+            //     if (t1 === 0 && t2 === 0) {
+            //       return [0, 1];
+            //     }
+            //     if (t1 === 0 && t2 === 1) {
+            //       return [1, 0];
+            //     }
+            //     if (t1 === 1 && t2 === 0) {
+            //       return [1, 1];
+            //     }
+            //     if (t1 === 1 && t2 === 1) {
+            //       return [0, 0];
+            //     }
+            //     return [0, 1];
+            //   })();
+            //   const center = centers[index1];
+            //   const arcs = calculateCircleArcs(center, p1, p2);
+            //   const arc = arcs[index2];
+            //   // console.log("[BIZ]canvas/index - after calculateCircleArcs(center", center, p1, p2, arc);
+            //   const circle: CircleCurved = {
+            //     center,
+            //     radius,
+            //     arc,
+            //     counterclockwise: (() => {
+            //       if (t1 === 0 && t2 === 0) {
+            //         // if (is_reverse) {
+            //         return true;
+            //         // }
+            //       }
+            //       // if (t1 === 0 && t2 === 1) {
+            //       //   return false;
+            //       // }
+            //       if (t1 === 1 && t2 === 0) {
+            //         if (is_reverse) {
+            //           return true;
+            //         }
+            //       }
+            //       // if (t1 === 1 && t2 === 1) {
+            //       // }
+            //       return false;
+            //     })(),
+            //     extra: { start: p1, rx, ry, rotate, t1, t2 },
+            //   };
+            //   // console.log("create point", next_command, next_values, p2, circle);
+            //   const next_path_point = PathPoint({
+            //     point: BezierPoint(p2),
+            //     from: null,
+            //     to: null,
+            //     circle,
+            //     virtual: false,
+            //   });
+            //   cur_path_point = next_path_point;
+            //   cur_path.appendPoint(next_path_point);
+            // }
+          }
+          if (["L", "l"].includes(next_command)) {
+            let v0 = next_values[0];
+            let v1 = next_values[1];
+            let p = {
+              x: this.normalizeX(v0, xExtra),
+              y: this.normalizeY(v1, xExtra),
+            };
+            if (["l"].includes(next_command)) {
+              // p = {
+              //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
+              //   y: this.normalizeY(v1, { ...xExtra, pureValue: true }),
+              // };
+              moveTo(p);
+            } else {
+              p = this.translate(p);
+            }
+            prev_point = p;
+            // console.log("create point", next_command, next, next_values, p);
+            const next_path_point = BezierPoint({
+              point: Point(p),
+              from: null,
+              to: null,
+              virtual: false,
+            });
+            cur_path_point = next_path_point;
+            cur_path.appendPoint(next_path_point);
+          }
+          if (["V", "v", "H", "h"].includes(next_command)) {
+            let distance = (() => {
+              const v = next_values[0];
+              if (["H", "h"].includes(next_command)) {
+                return this.normalizeX(v, xExtra);
+              }
+              if (["V", "v"].includes(next_command)) {
+                return this.normalizeY(v, yExtra);
+              }
+              return v;
+            })();
+            let p = {
+              x: 0,
+              y: 0,
+            };
+            if (next_command === "H") {
+              p.x = this.translateX(distance);
+              p.y = prev_point.y;
+              // p = this.translate(p);
+            }
+            if (next_command === "V") {
+              p.x = prev_point.x;
+              p.y = this.translateY(distance);
+              // p = this.translate(p);
+            }
+            if (next_command === "h") {
+              distance += prev_point.x;
+              // p.x = this.translateX(distance);
+              p.x = distance;
+              p.y = prev_point.y;
+            }
+            if (next_command === "v") {
+              distance += prev_point.y;
+              p.x = prev_point.x;
+              // p.y = this.translateX(distance);
+              p.y = distance;
+            }
+            prev_point = p;
+            // console.log("create point", next_command, next, next_values, p);
+            const next_path_point = BezierPoint({
+              point: Point(p),
+              from: null,
+              to: null,
+              virtual: false,
+            });
+            cur_path_point = next_path_point;
+            cur_path.appendPoint(next_path_point);
+          }
+          if (["C", "c"].includes(next_command)) {
+            let v0 = next_values[0];
+            let v1 = next_values[1];
+            let v2 = next_values[2];
+            let v3 = next_values[3];
+            let v4 = next_values[4];
+            let v5 = next_values[5];
+            let a1 = {
+              x: this.normalizeX(v0, xExtra),
+              y: this.normalizeY(v1, yExtra),
+            };
+            let a2 = {
+              x: this.normalizeX(v4, xExtra),
+              y: this.normalizeY(v5, yExtra),
+            };
+            let a3 = {
+              x: this.normalizeX(v2, xExtra),
+              y: this.normalizeY(v3, yExtra),
+            };
+            if (["c"].includes(next_command)) {
+              moveTo(a1);
+              moveTo(a2);
+              moveTo(a3);
+            } else {
+              a1 = this.translate(a1);
+              a2 = this.translate(a2);
+              a3 = this.translate(a3);
+            }
+            prev_point = a2;
+            if (cur_path_point) {
+              // 这里 cur_path_point 其实是 prev_path_point ？？？
+              cur_path_point.setTo(Point(a1));
+              if (cur_path_point.from) {
+                const collinear = isCollinear(cur_path_point.from.pos, cur_path_point.point.pos, a1);
+                cur_path_point.setMirror(BezierPointMirrorTypes.NoMirror);
+                if (collinear.collinear) {
+                  cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngle);
+                  if (collinear.midpoint) {
+                    cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
+                  }
+                }
+              }
+            }
+            // console.log("create point", next_command, a2);
+            const next_path_point = BezierPoint({
+              point: Point(a2),
+              from: Point(a3),
+              to: null,
+              virtual: false,
+            });
+            cur_path_point = next_path_point;
+            cur_path.appendPoint(next_path_point);
+          }
+          if (["S", "s"].includes(next_command)) {
+            // console.log("command S or s", !!cur_path_point, !!cur_path_point?.from, next_values);
+            if (cur_path_point && cur_path_point.from) {
+              let v0 = next_values[0];
+              let v1 = next_values[1];
+              let v2 = next_values[2];
+              let v3 = next_values[3];
+              let a2 = {
+                x: this.normalizeX(v0, xExtra),
+                y: this.normalizeY(v1, yExtra),
+              };
+              let a3 = {
+                x: this.normalizeX(v2, xExtra),
+                y: this.normalizeY(v3, yExtra),
+              };
+              if (["s"].includes(next_command)) {
+                moveTo(a2);
+                moveTo(a3);
+              } else {
+                a2 = this.translate(a2);
+                a3 = this.translate(a3);
+              }
+              prev_point = a3;
+              const a1 = findSymmetricPoint(cur_path_point.point.pos, cur_path_point.from.pos);
+              cur_path_point.setTo(Point(a1));
+              cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
+              // console.log("before create next_path_point", a2, a3);
+              const next_path_point = BezierPoint({
+                point: Point({ x: a3.x, y: a3.y }),
+                from: Point({ x: a2.x, y: a2.y }),
+                to: null,
+                virtual: false,
+              });
+              cur_path_point = next_path_point;
+              cur_path.appendPoint(next_path_point);
+            }
+          }
+          if (["Q", "q"].includes(next_command)) {
+            const v0 = next_values[0];
+            const v1 = next_values[1];
+            const v2 = next_values[2];
+            const v3 = next_values[3];
+            let a1 = {
+              x: this.normalizeX(v0, xExtra),
+              y: this.normalizeY(v1, yExtra),
+            };
+            let a2 = {
+              x: this.normalizeX(v2, xExtra),
+              y: this.normalizeY(v3, yExtra),
+            };
+            if (["q"].includes(next_command)) {
+              moveTo(a1);
+              moveTo(a2);
+            } else {
+              a1 = this.translate(a1);
+              a2 = this.translate(a2);
+            }
+            prev_point = a2;
+            const next_path_point = BezierPoint({
+              point: Point(a2),
+              from: Point(a1),
+              to: null,
+              virtual: false,
+            });
+            cur_path_point = next_path_point;
+            cur_path.appendPoint(next_path_point);
+          }
+          if (["T", "t"].includes(next_command)) {
+            const v0 = next_values[0];
+            const v1 = next_values[1];
+            let a2 = {
+              x: this.normalizeX(v0, xExtra),
+              y: this.normalizeY(v1, yExtra),
+            };
+            if (["t"].includes(next_command)) {
+              moveTo(a2);
+            } else {
+              a2 = this.translate(a2);
+            }
+            prev_point = a2;
+            if (cur_path_point && cur_path_point.from) {
+              // const a1 = getSymmetricPoints(cur_path_point.point.pos, cur_path_point.from.pos);
+              const prev_x = cur_path_point.point.pos.x;
+              const prev_from_x = cur_path_point.from.pos.x;
+              const prev_y = cur_path_point.point.pos.y;
+              const prev_from_y = cur_path_point.from.pos.y;
+              const a1 = {
+                x: prev_x + (prev_x - prev_from_x),
+                y: prev_y + (prev_y - prev_from_y),
+              };
+              const next_path_point = BezierPoint({
+                point: Point(a2),
+                from: Point(a1),
+                to: null,
+                virtual: false,
+              });
+              cur_path_point = next_path_point;
+              cur_path.appendPoint(next_path_point);
+            }
+          }
+        }
+      }
+    },
+
+    /**
+     * 检查是否有靠近可以吸附的线条
+     */
+    // checkAttachLinesBeforeDrag(curRect: RectShape): [RectShape, LineShape[]] {
+    //   const { things: contents } = this.values;
+    //   const rectLines: LineShape[] = [];
+    //   if (this.client === null) {
+    //     return [curRect, []];
+    //   }
+    //   const { width, height } = this.client;
+    //   const [nextRect, lines] = findNearbyLinesAtRect(
+    //     curRect,
+    //     rectLines.concat([
+    //       {
+    //         type: LineDirectionTypes.Horizontal,
+    //         origin: 0,
+    //         y: height / 2,
+    //         length: width,
+    //       },
+    //       {
+    //         type: LineDirectionTypes.Vertical,
+    //         origin: 0,
+    //         x: width / 2,
+    //         length: height,
+    //       },
+    //     ])
+    //   );
+    //   return [nextRect, lines];
+    // },
+
     update() {
       bus.emit(Events.Update);
     },
     handleMouseDown(pos: { x: number; y: number }) {
       const { x, y } = pos;
-      console.log("[BIZ]canvas/index - handleMouseDown before if (_pen_editing)", _pen_editing);
-      if (_pen_editing) {
+      console.log("[BIZ]canvas/index - handleMouseDown before if (_pen_editing)", _editing_pen);
+      if (_editing_pen) {
         if (!inGrid(pos)) {
           return;
         }
         const found = checkIsClickPathPoint(pos);
         console.log("[BIZ]canvas/index has matched point", found, _cur_path_point, _cur_point);
-        if (found && _cur_path_point && found !== _cur_path_point && _cur_bezier_path) {
+        if (found && _cur_path_point && found !== _cur_path_point && _cur_line_path) {
           if (found.start) {
             // 点击了开始点，闭合路径
             found.setEnd(true);
-            _cur_bezier_path.setClosed();
+            _cur_line_path.setClosed();
             _cur_path_point.setClosed();
-            _cur_path_point.point.move(found.point);
+            _cur_path_point.point.moveTo(found.point);
             _prepare_dragging = true;
             _moving_for_new_line = false;
           }
@@ -1160,10 +1236,11 @@ export function Canvas(props: CanvasProps) {
           _cur_point = _cur_path_point.to;
           return;
         }
-        // 画布空白，第一次点击，创建起点 @todo 移到 mouseup 中
+        // 画布空白，第一次点击，创建起点
+        // @todo 移到 mouseup 中
         _moving_for_new_line = true;
-        const start = PathPoint({
-          point: BezierPoint({
+        const start = BezierPoint({
+          point: Point({
             x,
             y,
           }),
@@ -1173,42 +1250,54 @@ export function Canvas(props: CanvasProps) {
           virtual: false,
           mirror: null,
         });
-        const end = PathPoint({
-          point: BezierPoint({
+        const end = BezierPoint({
+          point: Point({
             x: x + 10,
             y: y + 10,
           }),
           from: null,
           to: null,
-          mirror: PathPointMirrorTypes.MirrorAngleAndLength,
+          mirror: BezierPointMirrorTypes.MirrorAngleAndLength,
         });
         // console.log("create BezierPath");
-        _cur_bezier_path = BezierPath({
+        _cur_line_path = LinePath({
           points: [],
           closed: false,
         });
-        _cur_path.append(_cur_bezier_path);
-        _bezier_paths.push(_cur_bezier_path);
-        _cur_bezier_path.onPointCountChange(() => {
+        _cur_line.append(_cur_line_path);
+        _paths.push(_cur_line_path);
+        _cur_line_path.onPointCountChange(() => {
           updatePoints();
         });
         _prev_path_point = start;
         _cur_path_point = end;
         _prev_point = start.point;
         _cur_point = end.point;
-        _cur_bezier_path.appendPoint(start);
-        _cur_bezier_path.appendPoint(end);
+        _cur_line_path.appendPoint(start);
+        _cur_line_path.appendPoint(end);
         return;
       }
       _mx = x;
       _my = y;
-      const found = checkIsClickPoint(pos);
-      // console.log("[BIZ]canvas/index - after checkIsClickPoint(pos)", found);
-      if (found) {
-        _prepare_dragging = true;
-        _cur_point = found;
-        _cx = found.x;
-        _cy = found.y;
+      if (_editing_cursor) {
+        const found = checkIsClickPoint(pos);
+        // console.log("[BIZ]canvas/index - after checkIsClickPoint(pos)", found);
+        if (found) {
+          _prepare_dragging = true;
+          _cur_point = found;
+          _cx = found.x;
+          _cy = found.y;
+        }
+      }
+      if (_global_cursor) {
+        _moving_object = true;
+        const path = _paths[0];
+        if (path) {
+          path.startMove({
+            x: _mx,
+            y: _my,
+          });
+        }
       }
     },
     handleMouseMove(pos: { x: number; y: number }) {
@@ -1221,7 +1310,7 @@ export function Canvas(props: CanvasProps) {
       // if (_pen_editing && !_prepare_dragging && !inGrid(pos)) {
       //   return;
       // }
-      if (_pen_editing) {
+      if (_editing_pen) {
         const _inGrid = inGrid(pos);
         if (!_inGrid) {
           if (_out_grid === false) {
@@ -1249,13 +1338,13 @@ export function Canvas(props: CanvasProps) {
           // console.log("start dragging");
           _dragging = true;
           _prepare_dragging = false;
-          const to_of_cur_path_point = BezierPoint({
+          const to_of_cur_path_point = Point({
             x,
             y,
           });
           _cur_point = to_of_cur_path_point;
           _cur_path_point.setVirtual(false);
-          _cur_path_point.setMirror(PathPointMirrorTypes.MirrorAngleAndLength);
+          _cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
           _cur_path_point.setTo(to_of_cur_path_point);
           if (_prev_path_point && _prev_path_point.start) {
             // 特殊情况
@@ -1266,7 +1355,7 @@ export function Canvas(props: CanvasProps) {
               { x, y },
               AUTO_CONTROLLER_POINT_LENGTH_RATIO
             );
-            const to_of_prev_path_point = BezierPoint({
+            const to_of_prev_path_point = Point({
               x: p.x,
               y: p.y,
             });
@@ -1283,7 +1372,7 @@ export function Canvas(props: CanvasProps) {
                 { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
                 AUTO_CONTROLLER_POINT_LENGTH_RATIO
               );
-              to_of_prev_path_point.move({ x: p.x, y: p.y });
+              to_of_prev_path_point.moveTo({ x: p.x, y: p.y });
             });
             _events.push(unlisten);
             start.setTo(to_of_prev_path_point);
@@ -1297,7 +1386,7 @@ export function Canvas(props: CanvasProps) {
               { x, y },
               AUTO_CONTROLLER_POINT_LENGTH_RATIO
             );
-            const to_of_prev_path_point = BezierPoint({
+            const to_of_prev_path_point = Point({
               x: p.x,
               y: p.y,
             });
@@ -1314,7 +1403,7 @@ export function Canvas(props: CanvasProps) {
                 { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
                 AUTO_CONTROLLER_POINT_LENGTH_RATIO
               );
-              to_of_prev_path_point.move({ x: p.x, y: p.y });
+              to_of_prev_path_point.moveTo({ x: p.x, y: p.y });
             });
             _events.push(unlisten);
             prev_path_point.setTo(to_of_prev_path_point);
@@ -1323,7 +1412,7 @@ export function Canvas(props: CanvasProps) {
         if (_cur_point) {
           _ox = pos.x - _mx;
           _oy = pos.y - _my;
-          _cur_point.move({
+          _cur_point.moveTo({
             x: _cx + _ox,
             y: _cy + _oy,
           });
@@ -1331,19 +1420,36 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      if (!_prepare_dragging) {
-        return;
-      }
-      if (!_cur_point) {
-        return;
-      }
+      /** x方向移动的距离 */
       _ox = pos.x - _mx;
+      /** y方向移动的距离 */
       _oy = pos.y - _my;
-      _cur_point.move({
-        x: _cx + _ox,
-        y: _cy + _oy,
-      });
-      bus.emit(Events.Update);
+      if (_editing_cursor) {
+        if (!_prepare_dragging) {
+          return;
+        }
+        if (!_cur_point) {
+          return;
+        }
+        _cur_point.moveTo({
+          x: _cx + _ox,
+          y: _cy + _oy,
+        });
+        bus.emit(Events.Update);
+      }
+      if (_global_cursor) {
+        if (_moving_object) {
+          const path = _paths[0];
+          if (path) {
+            console.log("[BIZ]canvas/index - before move path", _ox, _oy);
+            path.move({
+              x: _ox,
+              y: _oy,
+            });
+            bus.emit(Events.Update);
+          }
+        }
+      }
     },
     handleMouseUp(pos: { x: number; y: number }) {
       const { x, y } = pos;
@@ -1354,8 +1460,8 @@ export function Canvas(props: CanvasProps) {
       _ox = 0;
       _oy = 0;
       // console.log("[BIZ]canvas - handleMouseUp", _pen_editing);
-      if (_pen_editing) {
-        const path = _cur_bezier_path;
+      if (_editing_pen) {
+        const path = _cur_line_path;
         if (!path) {
           return;
         }
@@ -1373,7 +1479,7 @@ export function Canvas(props: CanvasProps) {
           // console.log("before closed path mouse up");
           // 闭合路径松开
           const start = path.start_point;
-          start.setMirror(PathPointMirrorTypes.NoMirror);
+          start.setMirror(BezierPointMirrorTypes.NoMirror);
           start.setEnd(true);
           _cur_path_point.setVirtual(false);
           // console.log("[BIZ]canvas - before if (_cur_path_point.from", _cur_path_point.from);
@@ -1382,22 +1488,25 @@ export function Canvas(props: CanvasProps) {
             start.setFrom(_cur_path_point.from, { copy: true });
           }
           // console.log("_prev_path_point", _prev_path_point?.uid, _prev_path_point?.point.pos, _prev_path_point?.to);
-          if (_cur_bezier_path) {
-            _cur_bezier_path.removeLastPoint();
+          if (_cur_line_path) {
+            _cur_line_path.removeLastPoint();
           }
           _prepare_dragging = false;
           _dragging = false;
           _moving_for_new_line = false;
           _cur_point = null;
           _cur_path_point = null;
-          this.format(_paths);
+          this.format(_lines);
           bus.emit(Events.Update);
           return;
         }
         // console.log("_prepare_dragging / ", _prepare_dragging, _dragging, _cur_path_point);
         // console.log("[BIZ]canvas - handleMouseUp before if (_dragging ", _dragging);
         if (_dragging) {
-          // 确定一个点后生成线条，拖动控制点改变线条曲率，然后松开
+          // 点击确定曲线终点，生成曲线，拖动控制点改变曲线曲率，然后松开
+          // 两件事
+          // 1. 确定了一条曲线的终点和控制点2
+          // 2. 创建了一条未确定「终点跟着鼠标移动」的曲线
           if (!cur.from) {
             return;
           }
@@ -1407,26 +1516,29 @@ export function Canvas(props: CanvasProps) {
           if (_cur_path_point) {
             _cur_path_point.setVirtual(false);
           }
+          path.ensureSegment();
           const p = getSymmetricPoint2(cur.point, { x, y }, cur.from, AUTO_CONTROLLER_POINT_LENGTH_RATIO);
-          const from_of_new_path_point = BezierPoint({
+          const from_of_new_path_point = Point({
             x: p.x,
             y: p.y,
           });
-          const new_path_point = PathPoint({
-            point: BezierPoint({
+          // 下一个锚点，这个锚点会跟着鼠标动，还没确定落点
+          const next_path_point = BezierPoint({
+            point: Point({
               x: pos.x,
               y: pos.y,
             }),
             from: from_of_new_path_point,
             to: null,
             end: true,
-            mirror: PathPointMirrorTypes.NoMirror,
+            mirror: BezierPointMirrorTypes.NoMirror,
           });
           _prev_path_point = cur;
           _prev_point = cur.point;
-          _cur_path_point = new_path_point;
-          _cur_point = new_path_point.point;
-          path.appendPoint(new_path_point);
+          _cur_path_point = next_path_point;
+          _cur_point = next_path_point.point;
+          // console.log("[BIZ]canvas/index - before path.appendPoint", { x: pos.x, y: pos.y });
+          path.appendPoint(next_path_point);
           _cur_point.onMove(() => {
             if (!_cur_point) {
               return;
@@ -1440,7 +1552,7 @@ export function Canvas(props: CanvasProps) {
               { x: cur.from.x, y: cur.from.y },
               AUTO_CONTROLLER_POINT_LENGTH_RATIO
             );
-            from_of_new_path_point.move({
+            from_of_new_path_point.moveTo({
               x: p.x,
               y: p.y,
             });
@@ -1449,7 +1561,7 @@ export function Canvas(props: CanvasProps) {
         }
         // console.log("[BIZ]canvas - handleMouseUp before if (_prepare_dragging ", _prepare_dragging, _dragging);
         if (_prepare_dragging && !_dragging) {
-          // 确定一个点后生成线条，没有拖动控制点改变线条曲率，直接松开。这里直线曲线都可能
+          // 点击确定曲线终点，生成曲线，没有拖动控制点改变曲线曲率，直接松开。这里直线曲线都可能
           // @todo 如果本来是创建曲线，结果实际上创建了直线，应该移除曲线的控制点，变成真正的直线
           // console.log("初始化下一个坐标点", _cur_path_point?.mirror);
           _moving_for_new_line = true;
@@ -1457,10 +1569,10 @@ export function Canvas(props: CanvasProps) {
           _dragging = false;
           if (_cur_path_point) {
             _cur_path_point.setVirtual(false);
-            _cur_path_point.setMirror(PathPointMirrorTypes.NoMirror);
+            _cur_path_point.setMirror(BezierPointMirrorTypes.NoMirror);
           }
-          const new_path_point = PathPoint({
-            point: BezierPoint({
+          const new_path_point = BezierPoint({
+            point: Point({
               x: pos.x,
               y: pos.y,
             }),
@@ -1477,13 +1589,28 @@ export function Canvas(props: CanvasProps) {
         }
         return;
       }
-      if (!_prepare_dragging) {
-        return;
+      if (_editing_cursor) {
+        if (!_prepare_dragging) {
+          return;
+        }
+        _prepare_dragging = false;
+        _dragging = false;
+        _cur_point = null;
+        _cur_path_point = null;
       }
-      _prepare_dragging = false;
-      _dragging = false;
-      _cur_point = null;
-      _cur_path_point = null;
+      if (_global_cursor) {
+        if (_moving_object) {
+          _moving_object = false;
+          const path = _paths[0];
+          if (path) {
+            path.finishMove({
+              x: pos.x,
+              y: pos.y,
+            });
+            bus.emit(Events.Update);
+          }
+        }
+      }
     },
     get debug() {
       return _debug;
@@ -1507,157 +1634,3 @@ export function Canvas(props: CanvasProps) {
 }
 
 export type Canvas = ReturnType<typeof Canvas>;
-
-type CanvasLayerProps = {
-  index?: number;
-  zIndex?: number;
-  disabled?: boolean;
-  onMounted?: (layer: CanvasLayer) => void;
-};
-export function CanvasLayer(props: CanvasLayerProps) {
-  const { index = 0, zIndex = 0, disabled = false } = props;
-
-  let _mounted = false;
-  let _index = index;
-  let _z_index = zIndex;
-  let _disabled = disabled;
-  let _logs: string[] = [];
-
-  enum Events {
-    Mounted,
-  }
-  type TheTypesOfEvents = {
-    [Events.Mounted]: typeof _self;
-  };
-  const bus = base<TheTypesOfEvents>();
-
-  function onMounted(handler: Handler<TheTypesOfEvents[Events.Mounted]>) {
-    return bus.on(Events.Mounted, handler);
-  }
-  let log = (...args: string[]) => {
-    _logs.push(...args);
-  };
-
-  if (props.onMounted) {
-    onMounted(props.onMounted);
-  }
-
-  const _self = {
-    SymbolTag: "CanvasLayer" as const,
-    drawLine(p1: { x: number; y: number }, p2: { x: number; y: number }) {
-      console.log("请实现 drawLine 方法");
-    },
-    drawCurve(curve: { points: { x: number; y: number }[] }) {
-      console.log("请实现 drawCurve 方法");
-    },
-    drawCircle(point: { x: number; y: number }, radius: number) {
-      console.log("请实现 drawCircle 方法");
-    },
-    drawLabel(point: { x: number; y: number }) {
-      console.log("请实现 drawLabel 方法");
-    },
-    drawDiamondAtLineEnd(p1: { x: number; y: number }, p2: { x: number; y: number }) {
-      console.log("请实现 drawDiamondAtLineEnd 方法");
-    },
-    drawPoints(points: BezierPoint[]) {
-      console.log("请实现 drawPoints 方法");
-    },
-    drawGrid(callback: Function) {
-      console.log("请实现 drawGrid 方法");
-    },
-    clear() {
-      console.log("请实现 clear 方法");
-    },
-    beginPath() {
-      console.log("请实现 beginPath 方法");
-    },
-    closePath() {
-      console.log("请实现 closePath 方法");
-    },
-    moveTo(x: number, y: number) {
-      console.log("请实现 moveTo 方法");
-    },
-    arc(x: number, y: number, radius: number, startAngle: number, endAngle: number, counterclockwise?: boolean) {
-      console.log("请实现 arc 方法");
-    },
-    bezierCurveTo(cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number) {
-      console.log("请实现 bezierCurveTo 方法");
-    },
-    quadraticCurveTo(cpx: number, cpy: number, x: number, y: number) {
-      console.log("请实现 quadraticCurveTo 方法");
-    },
-    lineTo(x: number, y: number) {
-      console.log("请实现 lineTo 方法");
-    },
-    setStrokeStyle(v: string) {
-      console.log("请实现 setStrokeStyle 方法");
-    },
-    setLineWidth(v: number) {
-      console.log("请实现 setLineWidth 方法");
-    },
-    setLineCap(v: LineCapType) {
-      console.log("请实现 setLineWidth 方法");
-    },
-    setLineJoin(v: LineJoinType) {
-      console.log("请实现 setLineJoin 方法");
-    },
-    stroke() {
-      console.log("请实现 stroke 方法");
-    },
-    setGlobalCompositeOperation(v: PathCompositeOperation) {
-      console.log("请实现 setGlobalCompositeOperation 方法");
-    },
-    setFillStyle(v: string) {
-      console.log("请实现 setFillStyle 方法");
-    },
-    fill() {
-      console.log("请实现 fill 方法");
-    },
-    setFont(v: string) {
-      console.log("请实现 setFont 方法");
-    },
-    fillText(text: string, x: number, y: number, maxWidth?: number) {
-      console.log("请实现 fillText 方法");
-    },
-    save() {
-      console.log("请实现 save 方法");
-    },
-    restore() {
-      console.log("请实现 restore 方法");
-    },
-    log(...args: string[]) {
-      log(...args);
-    },
-    stopLog() {
-      log = () => {};
-    },
-    resumeLog() {
-      log = (...v: string[]) => {
-        _logs.push(...v);
-      };
-    },
-    emptyLogs() {
-      _logs = [];
-    },
-    get logs() {
-      return _logs;
-    },
-    get zIndex() {
-      return _z_index;
-    },
-    get disabled() {
-      return _disabled;
-    },
-    get mounted() {
-      return _mounted;
-    },
-    setMounted() {
-      _mounted = true;
-      bus.emit(Events.Mounted, _self);
-    },
-
-    onMounted,
-  };
-  return _self;
-}
-export type CanvasLayer = ReturnType<typeof CanvasLayer>;
