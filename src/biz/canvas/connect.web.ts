@@ -151,7 +151,7 @@ export function connectLayer(
     ctx.font = "10px Arial";
     const x = diamondBottomX;
     const y = diamondBottomY;
-    ctx.fillText(`${x},${y}`, x + 2, y - 2);
+    ctx.fillText(`${p2.x},${p2.y}`, p2.x + 2, p2.y - 2);
   };
   layer.drawGrid = (finish: Function) => {
     const { width, height } = canvas.size;

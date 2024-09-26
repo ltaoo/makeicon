@@ -34,9 +34,9 @@ export function CanvasModeManage(props: { state: StatusKeys }) {
       return _state;
     },
     is(v: StatusKeys) {
-      if (_prev && _prev === v) {
-        return _cache[v];
-      }
+      // if (_prev && _prev === v) {
+      //   return _cache[v];
+      // }
       const r = (() => {
         if (v === _state) {
           return true;
@@ -52,9 +52,10 @@ export function CanvasModeManage(props: { state: StatusKeys }) {
         }
         return false;
       })();
-      console.log("[BIZ]canvas/mode - invoke is", v, r);
-      _prev = v;
-      _cache[v] = r;
+      // console.log("[BIZ]canvas/mode - invoke is", v, r);
+      // _prev = v;
+      // _cache[v] = r;
+      return r;
     },
     set(v: StatusKeys) {
       _state = v;

@@ -9,11 +9,11 @@ type CanvasObjectProps = {
   rect: RectShape;
   options: {
     /** 缩放比例 */
-    ratio: number;
+    ratio?: number;
     /** 最小宽度 */
-    minWidth: number;
+    minWidth?: number;
     /** 最小高度 */
-    minHeight: number;
+    minHeight?: number;
     /** 开始拖动时的回调 */
     onStartDrag?: (ins: CanvasObject) => void;
     /**
@@ -39,16 +39,19 @@ type CanvasObjectProps = {
 export function CanvasObject(props: CanvasObjectProps) {
   const { rect, options } = props;
   let _id = uuid();
+  let _click_time = 0;
   /** 是否按下状态 */
-  let _isPressing = false;
+  let _pressing = false;
+  let _moving = false;
   /** 是否正在拖动 */
-  let _isDragging = false;
+  let _dragging = false;
   /** 是否正在缩放 */
-  let _isResizing = false;
+  let _resizing = false;
   /** 是否正在旋转 */
-  let _isRotating = false;
+  let _rotating = false;
   /** 是否锁定 */
   let _locking = false;
+  let _selected = false;
   let _node: null | unknown = null;
   /** 容器尺寸、位置信息 */
   let _client: RectShape = rect;
@@ -58,9 +61,7 @@ export function CanvasObject(props: CanvasObjectProps) {
   let _tmpRect: null | RectShape = null;
   /** 变形的额外参数 */
   let _options = options;
-  /** 矩形左上角水平方向初始值 */
   let _initialX = 0;
-  /** 矩形左上角垂直方向初始值 */
   let _initialY = 0;
   let _invokedDragStart = false;
   /** 缩放方向 */
@@ -77,11 +78,57 @@ export function CanvasObject(props: CanvasObjectProps) {
     x: 0,
     y: 0,
   };
+  const _state = {
+    get selected() {
+      return _selected;
+    },
+  };
+  enum Events {
+    Select,
+    Unselect,
+    StartDrag,
+    Dragging,
+    FinishDrag,
+    Change,
+  }
+  type TheTypesOfEvents = {
+    [Events.Select]: void;
+    [Events.Unselect]: void;
+    [Events.StartDrag]: { x: number; y: number };
+    [Events.Dragging]: { x: number; y: number; dx: number; dy: number };
+    [Events.FinishDrag]: { x: number; y: number };
+    [Events.Change]: typeof _state;
+  };
+  const bus = base<TheTypesOfEvents>();
 
   return {
+    state: _state,
     /** 绑定一个平台节点 */
     bindNode(node: unknown) {
       _node = node;
+    },
+    updateClient(shape: RectShape) {
+      _client = shape;
+    },
+    handleMouseDown(pos: { x: number; y: number }) {
+      _click_time = new Date().valueOf();
+      this.startDrag(pos);
+      this.select();
+    },
+    handleMouseMove(pos: { x: number; y: number }) {
+      this.drag(pos);
+    },
+    handleMouseUp(pos: { x: number; y: number }) {
+      // console.log("[BIZ]canvas/object - handleMouseUp", _dragging);
+      this.endDrag(pos);
+    },
+    select() {
+      _selected = true;
+      bus.emit(Events.Select);
+    },
+    unselect() {
+      _selected = false;
+      bus.emit(Events.Unselect);
     },
     /** 开始拖动 */
     startDrag(pos: Position) {
@@ -95,10 +142,11 @@ export function CanvasObject(props: CanvasObjectProps) {
       _tmpClient = { ..._client };
       // console.log("[DOMAIN]RectAnimationStore - start drag", this.tmpClient.left);
       const { x, y } = pos;
-      _isPressing = true;
+      _pressing = true;
       _initialX = x;
       _initialY = y;
       _invokedDragStart = false;
+      bus.emit(Events.StartDrag, { x, y });
     },
     /** 拖动 */
     drag(
@@ -107,16 +155,20 @@ export function CanvasObject(props: CanvasObjectProps) {
         enabledAngle?: number;
       }
     ) {
+      _moving = true;
       // console.log("[DOMAIN]TransformRect - drag");
       if (_locking) {
         return _client;
+      }
+      if (!_pressing) {
+        return;
       }
       const { onStartDrag, onDrag } = _options;
       if (!_invokedDragStart && onStartDrag) {
         _invokedDragStart = true;
         onStartDrag(this);
       }
-      _isDragging = true;
+      _dragging = true;
       const { x, y, enabledAngle } = pos;
       const deltaX = x - _initialX;
       const deltaY = y - _initialY;
@@ -142,31 +194,32 @@ export function CanvasObject(props: CanvasObjectProps) {
         y: targetRect.top,
         wait: true,
       });
-      _initialX = x;
-      _initialY = y;
-      if (onDrag) {
-        const updatedRect = onDrag(targetRect, {
-          x: deltaX,
-          y: deltaY,
-        });
-        // console.log("[DOMAIN]TransformRect - drop");
-        this.setPositionButNotUpdateClient({
-          x: updatedRect.left,
-          y: updatedRect.top,
-        });
-        return updatedRect;
-      }
+      // _initialX = x;
+      // _initialY = y;
+      // if (onDrag) {
+      //   const updatedRect = onDrag(targetRect, {
+      //     x: deltaX,
+      //     y: deltaY,
+      //   });
+      //   // console.log("[DOMAIN]TransformRect - drop");
+      //   this.setPositionButNotUpdateClient({
+      //     x: updatedRect.left,
+      //     y: updatedRect.top,
+      //   });
+      //   return updatedRect;
+      // }
       this.setPosition({
         x: targetRect.left,
         y: targetRect.top,
       });
       // console.log("[DOMAIN]RectAnimationStore - drop", this.rect);
+      bus.emit(Events.Dragging, { x, y, dx: deltaX, dy: deltaY });
       return targetRect;
     },
     /** 结束拖动 */
-    endDrag() {
+    endDrag(pos: { x: number; y: number }) {
       const { onEndDrag, onEndPress } = _options;
-      _isPressing = false;
+      _pressing = false;
       if (onEndPress) {
         onEndPress();
       }
@@ -176,15 +229,16 @@ export function CanvasObject(props: CanvasObjectProps) {
       // console.log("[DOMAIN]TransformRect - end drag prepare compare");
       const diff = this.compare(_client, _tmpClient);
       _tmpRect = { ..._client };
-      if (_isDragging === false) {
+      if (_dragging === false) {
         return;
       }
-      _isDragging = false;
+      _dragging = false;
       if (onEndDrag) {
         onEndDrag({
           diff,
         });
       }
+      bus.emit(Events.FinishDrag);
     },
     startResize(options: { x: number; y: number; type: string; isShift: boolean }) {
       const { onStartPress } = _options;
@@ -193,7 +247,7 @@ export function CanvasObject(props: CanvasObjectProps) {
       }
       //     console.log("[DOMAIN]RectAnimation - start resize", this.rect);
       const { x, y, type, isShift } = options;
-      _isPressing = true;
+      _pressing = true;
       _tmpClient = { ..._client };
       _initialX = x;
       _initialY = y;
@@ -202,13 +256,13 @@ export function CanvasObject(props: CanvasObjectProps) {
     },
     resize(options: { x: number; y: number; isShift: boolean }) {
       //     console.log("[DOMAIN]RectAnimation - resize");
-      if (!_isPressing) {
+      if (!_pressing) {
         return _client;
       }
       if (_resizeType === undefined) {
         return _client;
       }
-      _isResizing = true;
+      _resizing = true;
       const { x, y, isShift } = options;
       _resizeIsShift = isShift;
       /** 水平方向上移动的距离 */
@@ -264,7 +318,7 @@ export function CanvasObject(props: CanvasObjectProps) {
     },
     endResize() {
       const { onEndResize, onEndPress } = _options;
-      _isPressing = false;
+      _pressing = false;
       if (onEndPress) {
         onEndPress();
       }
@@ -277,7 +331,7 @@ export function CanvasObject(props: CanvasObjectProps) {
       _client = this.completeRect({ ...result });
       //       this.values = { ...this.client };
       //       this.emitValuesChange();
-      if (_isResizing === false) {
+      if (_resizing === false) {
         return;
       }
       const diff = this.compare(_client, _tmpClient);
@@ -302,13 +356,13 @@ export function CanvasObject(props: CanvasObjectProps) {
       };
       _rotateStartVector = startVector;
       _rotateCenter = center;
-      _isPressing = true;
+      _pressing = true;
     },
     rotate(options: { x: number; y: number }) {
-      if (!_isPressing) {
+      if (!_pressing) {
         return _client;
       }
-      _isRotating = true;
+      _rotating = true;
       const { x, y } = options;
       const center = _rotateCenter;
       const rotateVector = {
@@ -342,7 +396,7 @@ export function CanvasObject(props: CanvasObjectProps) {
     },
     endRotate() {
       const { onEndRotate, onEndPress } = _options;
-      _isPressing = false;
+      _pressing = false;
       if (onEndPress) {
         onEndPress();
       }
@@ -354,7 +408,7 @@ export function CanvasObject(props: CanvasObjectProps) {
       _client = this.completeRect({ ..._tmpRect });
       //       this.values = { ...this.client };
       //       this.emitValuesChange();
-      if (_isRotating === false) {
+      if (_rotating === false) {
         return;
       }
       const diff = this.compare(_client, _tmpClient);
@@ -472,6 +526,22 @@ export function CanvasObject(props: CanvasObjectProps) {
         height: height - prevHeight,
         angle: angle - prevAngle,
       });
+    },
+
+    onSelect(handler: Handler<TheTypesOfEvents[Events.Select]>) {
+      return bus.on(Events.Select, handler);
+    },
+    onUnselect(handler: Handler<TheTypesOfEvents[Events.Unselect]>) {
+      return bus.on(Events.Unselect, handler);
+    },
+    onStartDrag(handler: Handler<TheTypesOfEvents[Events.StartDrag]>) {
+      return bus.on(Events.StartDrag, handler);
+    },
+    onDragging(handler: Handler<TheTypesOfEvents[Events.Dragging]>) {
+      return bus.on(Events.Dragging, handler);
+    },
+    onFinishDrag(handler: Handler<TheTypesOfEvents[Events.FinishDrag]>) {
+      return bus.on(Events.FinishDrag, handler);
     },
   };
 }

@@ -72,6 +72,7 @@ export function PathSegment(props: PathSegmentProps) {
       console.log("[BIZ]path/segment - box", _bezier.points);
       return _bezier.bbox();
     },
+    /** 一条线段的终点确定下来了 */
     ensure() {
       _virtual = false;
       if (!_linear && _c1 && _c2) {

@@ -151,9 +151,6 @@ export function LinePath(props: BezierPathProps) {
     get state() {
       return _state;
     },
-    get segments() {
-      return _segments;
-    },
     /** 获取路径上最后一个坐标点 */
     getCurPoint() {
       return _path_points[_path_points.length - 1] ?? null;
@@ -221,22 +218,49 @@ export function LinePath(props: BezierPathProps) {
       refresh_bezier_points();
       bus.emit(Events.PointCountChange);
     },
-    ensureSegment() {
-      // const last = _segments[_segments.length - 1];
-      // console.log("[BIZ]path/index - ensureSegment", last);
-      // if (last) {
-      //   last.ensure();
-      // }
-      let end = _path_points[_path_points.length - 1];
-      let start = _path_points[_path_points.length - 2];
-      if (start && end) {
-        const segment = PathSegment({ start: start.point, end: end.point });
-        _segments.push(segment);
-        if (start.to && end.from) {
-          segment.setControls(start.to, end.from);
-        }
-        segment.ensure();
+    findPrevPointOfPoint(point: BezierPoint) {
+      const index = _path_points.findIndex((p) => p === point);
+      if (index === -1) {
+        return null;
       }
+      const prev_index = index - 1;
+      if (prev_index < 0) {
+        return null;
+      }
+      const r = _path_points[prev_index];
+      if (r) {
+        return r;
+      }
+      return null;
+    },
+    get segments() {
+      return _segments;
+    },
+    createSegment(point: BezierPoint) {
+      const end = point;
+      const start = this.findPrevPointOfPoint(point);
+      if (!start) {
+        return;
+      }
+      this.createSegmentFromTwoPoint(start, end);
+    },
+    createSegmentFromTwoPoint(point1: BezierPoint, point2: BezierPoint) {
+      const start = point1;
+      const end = point2;
+      const segment = PathSegment({ start: start.point, end: end.point });
+      _segments.push(segment);
+      console.log("[BIZ]path/index - createSegmentFromTwoPoint", {
+        start: `${start.x} ${start.y}`,
+        end: `${end.x} ${end.y}`,
+      });
+      if (start.to && end.from) {
+        console.log("[BIZ]path/index - createSegmentFromTwoPoint controls", {
+          to: `${start.to.x} ${start.to.y}`,
+          from: `${end.from.x} ${end.from.y}`,
+        });
+        segment.setControls(start.to, end.from);
+      }
+      segment.ensure();
     },
     /**
      * 存入了一个锚点，其实就是创建了一条曲线
@@ -299,7 +323,7 @@ export function LinePath(props: BezierPathProps) {
         x1: 0,
         y1: 0,
       };
-      console.log("[BIZ]path/index - buildBox", _segments.length);
+      console.log("[BIZ]path/index - buildBox the _segments count is", _segments.length);
       for (let i = 0; i < _segments.length; i += 1) {
         const box = _segments[i].box();
         if (box) {

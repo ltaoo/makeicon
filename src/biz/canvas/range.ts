@@ -48,8 +48,7 @@ export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
      * 开始框选
      */
     startRangeSelect(pos: Position) {
-      console.log("[DOMAIN]Canvas - startRangeSelect", _isPressing);
-      // console.log("[DOMAIN]Canvas - startRangeSelect", pos);
+      // console.log("[BIZ]canvas/range - startRangeSelect", _isPressing);
       _rangeStartPosition = pos;
     },
     /**
@@ -101,7 +100,7 @@ export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
      * 结束框选
      */
     endRangeSelect() {
-      console.log("[BIZ]canvas/range - endRangeSelect", _isRangeSelecting);
+      // console.log("[BIZ]canvas/range - endRangeSelect", _isRangeSelecting);
       if (_isRangeSelecting === false) {
         return;
       }

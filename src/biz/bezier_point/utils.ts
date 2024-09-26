@@ -7,7 +7,7 @@ export function findSymmetricPoint(point2: { x: number; y: number }, point: { x:
     x: 2 * point2.x - point.x,
     y: 2 * point2.y - point.y,
   };
-  return symmetricPoint;
+  return toFixPoint(symmetricPoint);
 }
 function findSymmetricPoint2(a1: { x: number; y: number }, a2: { x: number; y: number }) {
   // const mx = (a1.x + a2.x) / 2;
@@ -19,7 +19,7 @@ function findSymmetricPoint2(a1: { x: number; y: number }, a2: { x: number; y: n
     x: a2.x + dx,
     y: a2.y + dy,
   };
-  return a3;
+  return toFixPoint(a3);
 }
 
 export function getSymmetricPoint2(
@@ -47,7 +47,7 @@ export function getSymmetricPoint2(
     x: m1.x + ratio * (a4_prime.x - m1.x),
     y: m1.y + ratio * (a4_prime.y - m1.y),
   };
-  return a4;
+  return toFixPoint(a4);
 }
 
 const prefix = "data:image/";
@@ -155,8 +155,8 @@ function buildFourCurveOfCircle2(
 }
 
 export function getOutlineOfRect(
-  cur: PathPoint,
-  next: PathPoint,
+  cur: BezierPoint,
+  next: BezierPoint,
   extra: Partial<{ radius: number }> = {}
 ): { curves: Bezier[] } {
   const { radius = 20 } = extra;

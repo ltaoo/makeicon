@@ -9,6 +9,7 @@ import {
   distanceOfPoints,
   arc_to_curve,
   checkIsClockwise,
+  toFixPoint,
 } from "@/biz/bezier_point/utils";
 import { LinePath } from "@/biz/path";
 import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
@@ -18,16 +19,6 @@ export { math } from "@/utils/math/index";
 
 import { BoxSize, SideSize, CanvasThingShape, Position, Size, RectShape, LineShape } from "./types";
 import { CanvasThingTypes, Side, ALL_SLIDES, LineDirectionTypes, RectLineTypes } from "./constants";
-
-/**
- * 计算？
- * @deprecated
- * @param {number} distanceX - 水平方向上移动的距离
- * @param {number} distanceY  - 垂直方向上移动的距离
- */
-export function getLength(distanceX: number, distanceY: number) {
-  return Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-}
 
 export function getAngle({ x: x1, y: y1 }: { x: number; y: number }, { x: x2, y: y2 }: { x: number; y: number }) {
   const dot = x1 * x2 + y1 * y2;
@@ -608,6 +599,24 @@ export function getLengthByMaxSubMinInArray(arr: number[]) {
 //   }
 //   return mergedContents;
 // }
+
+export function checkPosInBox(pos: { x: number; y: number }, box: { x: number; y: number; x1: number; y1: number }) {
+  return pos.x >= box.x && pos.x <= box.x1 && pos.y >= box.y && pos.y <= box.y1;
+}
+
+export function boxToRectShape(box: { x: number; y: number; x1: number; y1: number }) {
+  const { x, y, x1, y1 } = box;
+  return {
+    left: x,
+    top: y,
+    right: x1,
+    bottom: y1,
+    center: {
+      x: (x1 - x) / 2 + x,
+      y: (y1 - y) / 2 + y,
+    },
+  } as RectShape;
+}
 
 /**
  * 检查两个矩形是否相交

@@ -79,9 +79,6 @@ export const HomeIndexPage: ViewComponent = (props) => {
     // console.log("[PAGE]index/index - draw", $$canvas.paths.length);
     const $graph_layer = $$canvas.layer;
     const $pen_layer = $$canvas.layers.path;
-    if (!$graph_layer) {
-      return;
-    }
     $graph_layer.clear();
     $pen_layer.clear();
     $graph_layer.emptyLogs();
@@ -251,7 +248,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
   });
   $$canvas.$selection.onChange((state) => {
     const $layer = $$canvas.layers.range;
-    console.log("[PAGE]before drawRect", state);
+    // console.log("[PAGE]before drawRect", state);
     $layer.clear();
     $layer.drawRect(state);
   });

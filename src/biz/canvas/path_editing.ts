@@ -126,6 +126,15 @@ export function PathEditing(props: PathEditingProps) {
     setBezierPoints(points: BezierPoint[]) {
       _path_points = points;
     },
+    complete() {
+      if (_cur_line_path) {
+        _cur_line_path.removeLastVirtualPoint();
+      }
+      _cur_line_path = null;
+    },
+    setPath(path: LinePath) {
+      _cur_line_path = path;
+    },
     handleMouseDown(pos: { x: number; y: number }) {
       //       if (_$canvas.state.mode === "default") {
       //         return;
@@ -167,21 +176,24 @@ export function PathEditing(props: PathEditingProps) {
       }
     },
     handleMouseMove(pos: { x: number; y: number }) {
+      // console.log("[BIZ]canvas/path_editing - handleMouseMove", pos);
       if (_$mode.value === "path_editing.pen") {
         // if (!_cur_path_point) {
         //   return;
         // }
         if (_$pointer.dragging && _cur_path_point) {
-          const to_of_cur_path_point = Point({
-            x: pos.x,
-            y: pos.y,
-          });
-          _cur_point = to_of_cur_path_point;
-          _cur_path_point.setVirtual(false);
-          _cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
-          _cur_path_point.setTo(to_of_cur_path_point);
+          if (!_cur_path_point.to) {
+            const to_of_cur_path_point = Point({
+              x: pos.x,
+              y: pos.y,
+            });
+            _cur_point = to_of_cur_path_point;
+            _cur_path_point.setVirtual(false);
+            _cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
+            _cur_path_point.setTo(to_of_cur_path_point);
+          }
           if (_prev_path_point && _prev_path_point.start) {
-            // 特殊情况？？？
+            // 开始拖动后，如果前一个点是「起点」，需要同步更新起点的「出控制点」
             const start = _prev_path_point;
             const p = getSymmetricPoint2(
               start.point,
@@ -193,22 +205,24 @@ export function PathEditing(props: PathEditingProps) {
               x: p.x,
               y: p.y,
             });
-            const unlisten = to_of_cur_path_point.onMove(() => {
-              if (!_cur_path_point) {
-                return;
-              }
-              if (!_cur_path_point.to) {
-                return;
-              }
-              const p = getSymmetricPoint2(
-                start.point,
-                { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
-                { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
-                AUTO_CONTROLLER_POINT_LENGTH_RATIO
-              );
-              to_of_prev_path_point.moveTo({ x: p.x, y: p.y });
-            });
-            _events.push(unlisten);
+            if (_cur_path_point.to) {
+              const unlisten = _cur_path_point.to.onMove(() => {
+                if (!_cur_path_point) {
+                  return;
+                }
+                if (!_cur_path_point.to) {
+                  return;
+                }
+                const p = getSymmetricPoint2(
+                  start.point,
+                  { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
+                  { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
+                  AUTO_CONTROLLER_POINT_LENGTH_RATIO
+                );
+                to_of_prev_path_point.moveTo({ x: p.x, y: p.y });
+              });
+              _events.push(unlisten);
+            }
             start.setTo(to_of_prev_path_point);
           }
           if (_prev_path_point && _prev_path_point.to === null && _prev_path_point.from === null) {
@@ -224,26 +238,27 @@ export function PathEditing(props: PathEditingProps) {
               x: p.x,
               y: p.y,
             });
-            const unlisten = to_of_cur_path_point.onMove(() => {
-              if (!_cur_path_point) {
-                return;
-              }
-              if (!_cur_path_point.to) {
-                return;
-              }
-              const p = getSymmetricPoint2(
-                prev_path_point.point,
-                { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
-                { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
-                AUTO_CONTROLLER_POINT_LENGTH_RATIO
-              );
-              to_of_prev_path_point.moveTo({ x: p.x, y: p.y });
-            });
-            _events.push(unlisten);
+            // const unlisten = to_of_cur_path_point.onMove(() => {
+            //   if (!_cur_path_point) {
+            //     return;
+            //   }
+            //   if (!_cur_path_point.to) {
+            //     return;
+            //   }
+            //   const p = getSymmetricPoint2(
+            //     prev_path_point.point,
+            //     { x: _cur_path_point.point.x, y: _cur_path_point.point.y },
+            //     { x: _cur_path_point.to.x, y: _cur_path_point.to.y },
+            //     AUTO_CONTROLLER_POINT_LENGTH_RATIO
+            //   );
+            //   to_of_prev_path_point.moveTo({ x: p.x, y: p.y });
+            // });
+            // _events.push(unlisten);
             prev_path_point.setTo(to_of_prev_path_point);
           }
         }
         if (_moving_for_new_line && _cur_point) {
+          console.log("[BIZ]canvas/path_editing - before _cur_point.moveTo", pos);
           _cur_point.moveTo({
             x: pos.x,
             y: pos.y,
@@ -288,7 +303,7 @@ export function PathEditing(props: PathEditingProps) {
         _events = [];
         console.log("[BIZ]canvas/path_editing - handleMouseUp before if (!_cur_path_point ", _cur_path_point);
         if (!_cur_line_path) {
-          // 画布空白，第一次点击，创建起点
+          // 新路径，创建起点
           const start = BezierPoint({
             point: Point({
               x: pos.x,
@@ -338,26 +353,36 @@ export function PathEditing(props: PathEditingProps) {
         if (!_cur_line_path) {
           return;
         }
-        console.log("[BIZ]canvas/path_editing - handleMouseUp close path", _cur_path_point, _closing);
+        console.log("[BIZ]canvas/path_editing - handleMouseUp before if (_closing", _cur_path_point, _closing);
         if (_closing && _cur_path_point) {
-          // console.log("before closed path mouse up");
+          console.log("[BIZ]canvas/path_editing - handleMouseUp close the path", {
+            x: _cur_path_point.x,
+            y: _cur_path_point.y,
+          });
           // 闭合路径松开
-          const start = _cur_line_path.start_point;
-          start.setMirror(BezierPointMirrorTypes.NoMirror);
-          start.setEnd(true);
+          const start_point = _cur_line_path.start_point;
+          start_point.setMirror(BezierPointMirrorTypes.NoMirror);
+          start_point.setEnd(true);
           _cur_path_point.setVirtual(false);
           // console.log("[BIZ]canvas - before if (_cur_path_point.from", _cur_path_point.from);
           if (_cur_path_point.from) {
             // 因为待会要删掉最后一个坐标点及其控制点，所以这里是 copy
-            start.setFrom(_cur_path_point.from, { copy: true });
+            start_point.setFrom(_cur_path_point.from, { copy: true });
           }
           // console.log("_prev_path_point", _prev_path_point?.uid, _prev_path_point?.point.pos, _prev_path_point?.to);
           if (_cur_line_path) {
             _cur_line_path.removeLastPoint();
           }
-          _moving_for_new_line = false;
-          _cur_point = null;
+          if (_prev_path_point) {
+            _cur_line_path.createSegmentFromTwoPoint(_prev_path_point, start_point);
+          }
+          _cur_line_path = null;
+          _prev_path_point = null;
           _cur_path_point = null;
+          _prev_point = null;
+          _cur_point = null;
+          _moving_for_new_line = false;
+          _closing = false;
           //   this.format(_lines);
           bus.emit(Events.Refresh);
           return;
@@ -368,23 +393,21 @@ export function PathEditing(props: PathEditingProps) {
           // 两件事
           // 1. 确定了一条曲线的终点和控制点2
           // 2. 创建了一条未确定「终点跟着鼠标移动」的曲线
-          const cur = _cur_line_path.getCurPoint();
-          // cur 不就是 _cur_path_point 吗？
-          if (!cur) {
+          if (!_cur_path_point) {
             return;
           }
-          if (!cur.from) {
+          if (!_cur_path_point.from) {
             return;
           }
           _moving_for_new_line = true;
           if (_cur_path_point) {
             _cur_path_point.setVirtual(false);
+            _cur_line_path.createSegment(_cur_path_point);
           }
-          _cur_line_path.ensureSegment();
           const from_point_pos = getSymmetricPoint2(
-            cur.point,
+            _cur_path_point.point,
             { x: pos.x, y: pos.y },
-            cur.from,
+            _cur_path_point.from,
             AUTO_CONTROLLER_POINT_LENGTH_RATIO
           );
           const from_of_new_path_point = Point({
@@ -402,23 +425,23 @@ export function PathEditing(props: PathEditingProps) {
             end: true,
             mirror: BezierPointMirrorTypes.NoMirror,
           });
-          _prev_path_point = cur;
-          _prev_point = cur.point;
+          _prev_path_point = _cur_path_point;
+          _prev_point = _cur_path_point.point;
           _cur_path_point = next_path_point;
           _cur_point = next_path_point.point;
           // console.log("[BIZ]canvas/index - before path.appendPoint", { x: pos.x, y: pos.y });
           _cur_line_path.appendPoint(next_path_point);
           _cur_point.onMove(() => {
-            if (!_cur_point) {
+            if (!_cur_path_point) {
               return;
             }
-            if (!cur.from) {
+            if (!_cur_path_point.from) {
               return;
             }
             const p = getSymmetricPoint2(
-              cur.point,
-              { x: _cur_point.x, y: _cur_point.y },
-              { x: cur.from.x, y: cur.from.y },
+              _cur_path_point.point,
+              { x: _cur_path_point.x, y: _cur_path_point.y },
+              { x: _cur_path_point.from.x, y: _cur_path_point.from.y },
               AUTO_CONTROLLER_POINT_LENGTH_RATIO
             );
             from_of_new_path_point.moveTo({
@@ -433,9 +456,7 @@ export function PathEditing(props: PathEditingProps) {
           // 点击确定曲线终点，生成曲线，没有拖动控制点改变曲线曲率，直接松开。这里直线曲线都可能
           // @todo 如果本来是创建曲线，结果实际上创建了直线，应该移除曲线的控制点，变成真正的直线
           // console.log("初始化下一个坐标点", _cur_path_point?.mirror);
-          const cur = _cur_line_path.getCurPoint();
-          // cur 不就是 _cur_path_point 吗？
-          if (!cur) {
+          if (!_cur_path_point) {
             return;
           }
           _moving_for_new_line = true;
@@ -452,8 +473,8 @@ export function PathEditing(props: PathEditingProps) {
             to: null,
             end: true,
           });
-          _prev_path_point = cur;
-          _prev_point = cur.point;
+          _prev_path_point = _cur_path_point;
+          _prev_point = _cur_path_point.point;
           _cur_path_point = new_path_point;
           _cur_point = new_path_point.point;
           _cur_line_path.appendPoint(new_path_point);
