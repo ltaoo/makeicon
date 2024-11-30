@@ -46,6 +46,9 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
   let _pressing = false;
   /** 当前是否处于拖动 */
   let _dragging = false;
+  let _timer: null | NodeJS.Timer = null;
+  let _timer2: null | NodeJS.Timer = null;
+  let _click_count = 0;
   let _out_grid = true;
 
   function updatePoints() {
@@ -66,6 +69,9 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
     PointerDown,
     PointerMove,
     PointerUp,
+    Click,
+    DoubleClick,
+    LongPress,
     LeaveGrid,
     EnterGrid,
     Update,
@@ -74,6 +80,9 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
     [Events.PointerDown]: void;
     [Events.PointerMove]: void;
     [Events.PointerUp]: void;
+    [Events.Click]: { x: number; y: number };
+    [Events.DoubleClick]: { x: number; y: number };
+    [Events.LongPress]: { x: number; y: number };
     [Events.LeaveGrid]: void;
     [Events.EnterGrid]: void;
     [Events.Update]: void;
@@ -102,6 +111,21 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
       _mx = pos.x;
       _my = pos.y;
       _pressing = true;
+      _click_count += 1;
+      _timer = setTimeout(() => {
+        if (!_pressing && _click_count === 1) {
+          bus.emit(Events.Click, pos);
+        }
+        _click_count = 0;
+        _timer = null;
+      }, 300);
+      _timer2 = setTimeout(() => {
+        // _click_count = 0;
+        // _timer = null;
+        if (_pressing && !_dragging) {
+          bus.emit(Events.LongPress, pos);
+        }
+      }, 600);
       bus.emit(Events.PointerDown);
     },
     handleMouseMove(pos: { x: number; y: number }) {
@@ -132,6 +156,23 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
       bus.emit(Events.PointerMove);
     },
     handleMouseUp(pos: { x: number; y: number }) {
+      if (_dragging === false) {
+      }
+      if (_click_count === 2) {
+        bus.emit(Events.DoubleClick, pos);
+        _click_count = 0;
+        if (_timer) {
+          clearTimeout(_timer);
+          _timer = null;
+        }
+        if (_timer2) {
+          clearTimeout(_timer2);
+          _timer2 = null;
+        }
+      }
+      // if (_click_count === 1) {
+      //   bus.emit(Events.Click, pos);
+      // }
       _pressing = false;
       _dragging = false;
       _mx = 0;
@@ -148,6 +189,15 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
     },
     onLeaveGrid(handler: Handler<TheTypesOfEvents[Events.LeaveGrid]>) {
       return bus.on(Events.LeaveGrid, handler);
+    },
+    onDoubleClick(handler: Handler<TheTypesOfEvents[Events.DoubleClick]>) {
+      return bus.on(Events.DoubleClick, handler);
+    },
+    onClick(handler: Handler<TheTypesOfEvents[Events.Click]>) {
+      return bus.on(Events.Click, handler);
+    },
+    onLongPress(handler: Handler<TheTypesOfEvents[Events.LongPress]>) {
+      return bus.on(Events.LongPress, handler);
     },
   };
 }

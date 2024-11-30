@@ -3,7 +3,7 @@
  * 概念上
  */
 import { base, Handler } from "@/domains/base";
-import { Point } from "@/biz/point";
+import { Point, PointType } from "@/biz/point";
 
 import { findSymmetricPoint } from "./utils";
 
@@ -60,14 +60,6 @@ export function BezierPoint(props: BezierPointProps) {
   let _virtual = virtual;
   /** 表示隐藏，不绘制 */
   let _hidden = false;
-  if (_mirror === BezierPointMirrorTypes.MirrorAngleAndLength && _from && !_to) {
-    const symPoint = findSymmetricPoint({ x: point.x, y: point.y }, _from);
-    _to = Point(symPoint);
-  }
-  if (_mirror === BezierPointMirrorTypes.MirrorAngleAndLength && _to && !_from) {
-    const symPoint = findSymmetricPoint({ x: point.x, y: point.y }, _to);
-    _from = Point(symPoint);
-  }
   let _circle = circle;
   let _start = start;
   let _end = end;
@@ -106,21 +98,32 @@ export function BezierPoint(props: BezierPointProps) {
     const t = _to;
     if (f && t) {
       f.onMove((v) => {
+        if (_mirror === BezierPointMirrorTypes.NoMirror) {
+          return;
+        }
         const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, f);
         t.moveTo({ x: symPoint.x, y: symPoint.y }, { silence: true });
       });
       f.onMove((v) => {
+        if (_mirror === BezierPointMirrorTypes.NoMirror) {
+          return;
+        }
         const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, t);
         f.moveTo({ x: symPoint.x, y: symPoint.y }, { silence: true });
       });
     }
   }
 
-  return {
+  const _this = {
     SymbolTag: "BezierPoint" as const,
     get uid() {
       return _uid;
     },
+    get selected() {
+      return _point.selected;
+    },
+    select: _point.select,
+    unselect: _point.unselect,
     get x() {
       return _point.x;
     },
@@ -148,14 +151,22 @@ export function BezierPoint(props: BezierPointProps) {
         _from = Point({
           x: symPoint.x,
           y: symPoint.y,
+          type: PointType.Control,
+          // parent: _this,
         });
         // const t = _to;
         const f = _from;
         f.onMove(() => {
+          if (_mirror === BezierPointMirrorTypes.NoMirror) {
+            return;
+          }
           const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, f);
           t.moveTo({ x: symPoint.x, y: symPoint.y }, { silence: true });
         });
         t.onMove(() => {
+          if (_mirror === BezierPointMirrorTypes.NoMirror) {
+            return;
+          }
           const symPoint = findSymmetricPoint({ x: _point.x, y: _point.y }, t);
           f.moveTo({ x: symPoint.x, y: symPoint.y }, { silence: true });
         });
@@ -174,6 +185,8 @@ export function BezierPoint(props: BezierPointProps) {
         _from = Point({
           x: point.x,
           y: point.y,
+          type: PointType.Control,
+          // parent: _this,
         });
       }
       bus.emit(Events.ToOrFromChange);
@@ -208,12 +221,18 @@ export function BezierPoint(props: BezierPointProps) {
       return _virtual;
     },
     setVirtual(v: boolean) {
+      if (_virtual === v) {
+        return;
+      }
       _virtual = v;
     },
     get hidden() {
       return _hidden;
     },
     setHidden(v: boolean) {
+      if (_hidden === v) {
+        return;
+      }
       _hidden = v;
     },
     get mirror() {
@@ -221,10 +240,10 @@ export function BezierPoint(props: BezierPointProps) {
     },
     setMirror(type: BezierPointMirrorTypes, extra: Partial<{ silence: boolean }> = {}) {
       const { silence = true } = extra;
-      const cur = _mirror;
-      if (cur === type) {
+      if (type === _mirror) {
         return;
       }
+      const prev = _mirror;
       _mirror = type;
       if (silence) {
         return;
@@ -232,7 +251,7 @@ export function BezierPoint(props: BezierPointProps) {
       if (type === BezierPointMirrorTypes.MirrorAngleAndLength) {
       }
       if (type === BezierPointMirrorTypes.MirrorAngle) {
-        if (cur === BezierPointMirrorTypes.MirrorAngleAndLength) {
+        if (prev === BezierPointMirrorTypes.MirrorAngleAndLength) {
           // 之前是完全对称，改成角度对称，不用任何调整
           return;
         }
@@ -249,13 +268,36 @@ export function BezierPoint(props: BezierPointProps) {
     },
     state: _state,
     deletePoint(point: Point) {
+      console.log(
+        "[BIZ]bezier_point - deletePoint",
+        _from === point,
+        _to === point,
+        {
+          x: point.pos.x,
+          y: point.pos.y,
+        },
+        _from
+          ? {
+              x: _from.x,
+              y: _from.y,
+            }
+          : null,
+        _to
+          ? {
+              x: _to.x,
+              y: _to.y,
+            }
+          : null
+      );
       if (_from === point) {
         _from = null;
         _mirror = BezierPointMirrorTypes.NoMirror;
+        bus.emit(Events.ToOrFromChange);
       }
       if (_to === point) {
         _to = null;
         _mirror = BezierPointMirrorTypes.NoMirror;
+        bus.emit(Events.ToOrFromChange);
       }
     },
     /** 移动指定距离 */
@@ -300,6 +342,27 @@ export function BezierPoint(props: BezierPointProps) {
       return bus.on(Events.ToOrFromChange, handler);
     },
   };
+
+  if (_mirror === BezierPointMirrorTypes.MirrorAngleAndLength && _from && !_to) {
+    const symPoint = findSymmetricPoint({ x: point.x, y: point.y }, _from);
+    _to = Point({
+      x: symPoint.x,
+      y: symPoint.y,
+      type: PointType.Control,
+      // parent: _this,
+    });
+  }
+  if (_mirror === BezierPointMirrorTypes.MirrorAngleAndLength && _to && !_from) {
+    const symPoint = findSymmetricPoint({ x: point.x, y: point.y }, _to);
+    _from = Point({
+      x: symPoint.x,
+      y: symPoint.y,
+      type: PointType.Control,
+      // parent: _this,
+    });
+  }
+
+  return _this;
 }
 
 export type BezierPoint = ReturnType<typeof BezierPoint>;

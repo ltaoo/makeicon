@@ -272,6 +272,13 @@ export function buildCommandsFromPathPoints(_path_points: BezierPoint[]) {
   for (let i = 0; i < _path_points.length; i += 1) {
     const prev = _path_points[i - 1];
     const cur = _path_points[i];
+    // console.log(
+    //   "[BIZ]path/utils - buildCommands - loop",
+    //   i,
+    //   `${cur.x}, ${cur.y}`,
+    //   `${cur.from?.x}, ${cur.from?.y}`,
+    //   `${cur.to?.x}, ${cur.to?.y}`
+    // );
     const next = _path_points[i + 1];
     if (cur.start) {
       if (cur.end) {
@@ -306,6 +313,15 @@ export function buildCommandsFromPathPoints(_path_points: BezierPoint[]) {
             a: [cur.from.x, cur.from.y, cur.point.x, cur.point.y],
             end: prev ? prev.point.pos : null,
             start: next && !next.from ? cur.point.pos : null,
+          });
+          return;
+        }
+        if (prev.to && !cur.from) {
+          commands.push({
+            c: "Q",
+            a: [prev.to.x, prev.to.y, cur.point.x, cur.point.y],
+            end: cur.point.pos,
+            start: prev.point.pos,
           });
           return;
         }

@@ -20,16 +20,16 @@ export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
   let _rangeSelection = createEmptyRectShape();
   const _state = {
     get x() {
-      return _rangeSelection.left;
+      return _rangeSelection.x;
     },
     get y() {
-      return _rangeSelection.top;
+      return _rangeSelection.y;
     },
     get x1() {
-      return _rangeSelection.left + _rangeSelection.width;
+      return _rangeSelection.x + _rangeSelection.width;
     },
     get y1() {
-      return _rangeSelection.top + _rangeSelection.height;
+      return _rangeSelection.y + _rangeSelection.height;
     },
   };
 
@@ -56,13 +56,13 @@ export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
      */
     rangeSelect(pos: Position) {
       const { x, y } = pos;
+      // console.log("[BIZ]canvas/range - rangeSelect", x, y, _$pointer.dragging);
       if (_rangeStartPosition === null) {
         return;
       }
       if (!_$pointer.dragging) {
         return;
       }
-      // console.log("[DOMAIN]Canvas - rangeSelect", x, y);
       if (_isRangeSelecting === false) {
         // @todo 可以判断下移动的距离，如果小于某个阈值，就不算
         _isRangeSelecting = true;
@@ -82,8 +82,10 @@ export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
       };
       const startPos = _rangeStartPosition;
       const payload = Object.assign(createEmptyRectShape(), {
-        left: x > startPos.x ? startPos.x - parentRect.left : x - parentRect.left,
-        top: y > startPos.y ? startPos.y - parentRect.top : y - parentRect.top,
+        x: x > startPos.x ? startPos.x - parentRect.left : x - parentRect.left,
+        y: y > startPos.y ? startPos.y - parentRect.top : y - parentRect.top,
+        x1: x,
+        y1: y,
         width: Math.abs(x - startPos.x),
         height: Math.abs(y - startPos.y),
       });
@@ -94,6 +96,7 @@ export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
       // console.log("[DOMAIN]Canvas - rangeSelect", selectedContents);
       // @todo 其实这里也可以给外部决定哪些能「选中」
       //       this.selectThings(selectedThings.map((content) => content.id));
+      // console.log("[BIZ]canvas/range - rangeSelect", _state.x, _state.y);
       bus.emit(Events.Change, { ..._state });
     },
     /**
@@ -104,6 +107,12 @@ export function CanvasRangeSelection(props: CanvasRangeSelectionProps) {
       if (_isRangeSelecting === false) {
         return;
       }
+      _isRangeSelecting = false;
+      _rangeStartPosition = null;
+      _rangeSelection = createEmptyRectShape();
+      bus.emit(Events.Change, { ..._state });
+    },
+    clear() {
       _isRangeSelecting = false;
       _rangeStartPosition = null;
       _rangeSelection = createEmptyRectShape();

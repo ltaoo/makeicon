@@ -7,8 +7,9 @@
  */
 import { base } from "@/domains/base";
 import { LinePath } from "@/biz/path";
-import { boxToRectShape, checkPosInBox, createEmptyRectShape } from "@/biz/canvas/utils";
+import { boxToRectShape, createEmptyRectShape } from "@/biz/canvas/utils";
 import { CanvasObject } from "@/biz/canvas/object";
+import { CursorType } from "@/biz/canvas/constants";
 
 // https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/stroke-linecap
 export type LineCapType = "butt" | "round" | "square";
@@ -62,8 +63,9 @@ export function Line(props: PathProps) {
     _fill.color = fill.color;
   }
   let _composite = "source-over" as PathCompositeOperation;
-  let _box = { x: 0, y: 0, x1: 0, y1: 0 };
-  let _tmp_box: null | typeof _box = null;
+  // let _box = { x: 0, y: 0, x1: 0, y1: 0 };
+  // let _tmp_box: null | typeof _box = null;
+  let _editing = true;
   const _state = {
     get stroke() {
       return _stroke;
@@ -75,19 +77,21 @@ export function Line(props: PathProps) {
       return _composite;
     },
   };
-  function moveBox(values: { dx: number; dy: number }) {
-    if (!_tmp_box) {
-      _tmp_box = { ..._box };
-    }
-    _tmp_box.x = _box.x + values.dx;
-    _tmp_box.x1 = _box.x1 + values.dx;
-    _tmp_box.y = _box.y + values.dy;
-    _tmp_box.y1 = _box.y1 + values.dy;
-  }
+  // function moveBox(values: { dx: number; dy: number }) {
+  //   if (!_tmp_box) {
+  //     _tmp_box = { ..._box };
+  //   }
+  //   _tmp_box.x = _box.x + values.dx;
+  //   _tmp_box.x1 = _box.x1 + values.dx;
+  //   _tmp_box.y = _box.y + values.dy;
+  //   _tmp_box.y1 = _box.y1 + values.dy;
+  // }
   enum Events {
+    CursorChange,
     Change,
   }
   type TheTypesOfEvents = {
+    [Events.CursorChange]: CursorType;
     [Events.Change]: typeof _state;
   };
   const bus = base<TheTypesOfEvents>();
@@ -103,18 +107,19 @@ export function Line(props: PathProps) {
       const path = _paths[i];
       path.move({ x: values.dx, y: values.dy });
     }
-    moveBox({ dx: values.dx, dy: values.dy });
+    // moveBox({ dx: values.dx, dy: values.dy });
   });
   _$obj.onFinishDrag((pos) => {
     for (let i = 0; i < _paths.length; i += 1) {
       const path = _paths[i];
       path.finishMove(pos);
     }
-    if (_tmp_box) {
-      _box = { ..._tmp_box };
-      _tmp_box = null;
-    }
+    // if (_tmp_box) {
+    //   _box = { ..._tmp_box };
+    //   _tmp_box = null;
+    // }
   });
+  _$obj.onCursorChange((v) => bus.emit(Events.CursorChange, v));
 
   return {
     SymbolTag: "Line" as const,
@@ -125,11 +130,25 @@ export function Line(props: PathProps) {
     get selected() {
       return _$obj.state.selected;
     },
+    get editing() {
+      return _editing;
+    },
+    setEditing(v: boolean) {
+      _editing = v;
+    },
     get box() {
-      if (_tmp_box) {
-        return _tmp_box;
-      }
-      return _box;
+      // if (_tmp_box) {
+      //   return _tmp_box;
+      // }
+      // return _box;
+      return _$obj.client;
+    },
+    setFill(values: { color: string; opacity: number; visible: boolean }) {
+      const { color, opacity, visible } = values;
+      _fill = {
+        enabled: visible,
+        color: color,
+      };
     },
     refreshBox() {
       const rect = {
@@ -138,7 +157,7 @@ export function Line(props: PathProps) {
         x1: 0,
         y1: 0,
       };
-      console.log("[BIZ]line/index - buildBox the _paths count is", _paths.length);
+      // console.log("[BIZ]line/index - buildBox the _paths count is", _paths.length);
       for (let i = 0; i < _paths.length; i += 1) {
         const box = _paths[i].buildBox();
         if (box) {
@@ -160,13 +179,16 @@ export function Line(props: PathProps) {
           })();
         }
       }
-      _box = rect;
-      _$obj.updateClient(boxToRectShape(_box));
+      _$obj.updateClient(boxToRectShape(rect));
     },
-    moveBox,
+    buildEdgesOfBox() {
+      // console.log("[BIZ]line/index - buildEdgesOfBox", _tmp_box?.x);
+      return _$obj.buildEdgeOfBox();
+    },
+    // moveBox,
     inBox(pos: { x: number; y: number }) {
       this.refreshBox();
-      return checkPosInBox(pos, _box);
+      return _$obj.checkInBox(pos);
     },
     append(path: LinePath) {
       _paths.push(path);
@@ -202,6 +224,9 @@ export function Line(props: PathProps) {
     },
     onFinishDrag(...args: Parameters<typeof _$obj.onFinishDrag>) {
       return _$obj.onFinishDrag(...args);
+    },
+    onCursorChange(...args: Parameters<typeof _$obj.onCursorChange>) {
+      return _$obj.onCursorChange(...args);
     },
   };
 }

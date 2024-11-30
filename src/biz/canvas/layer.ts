@@ -48,7 +48,7 @@ export function CanvasLayer(props: CanvasLayerProps) {
     drawCircle(point: { x: number; y: number }, radius: number) {
       console.log("请实现 drawCircle 方法");
     },
-    drawRect(rect: { x: number; y: number; x1: number; y1: number }) {
+    drawRect(rect: { x: number; y: number; x1: number; y1: number }, extra: Partial<{ background: string }> = {}) {
       console.log("请实现 drawRect 方法");
     },
     drawLabel(point: { x: number; y: number }) {

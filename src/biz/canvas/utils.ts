@@ -13,7 +13,7 @@ import {
 } from "@/biz/bezier_point/utils";
 import { LinePath } from "@/biz/path";
 import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
-import { Point } from "@/biz/point";
+import { Point, PointType } from "@/biz/point";
 import { Line } from "@/biz/line";
 export { math } from "@/utils/math/index";
 
@@ -73,7 +73,7 @@ function setHeightAndDeltaH(height: number, deltaH: number, minHeight: number) {
 /**
  * 根据鼠标位置、方向等，计算盒子大小、位置和角度
  */
-export function getNewStyle(
+export function calcNewStyleOfTransformingBox(
   /** 移动方向 */
   type: string,
   /** 矩形信息 */
@@ -607,10 +607,10 @@ export function checkPosInBox(pos: { x: number; y: number }, box: { x: number; y
 export function boxToRectShape(box: { x: number; y: number; x1: number; y1: number }) {
   const { x, y, x1, y1 } = box;
   return {
-    left: x,
-    top: y,
-    right: x1,
-    bottom: y1,
+    x: x,
+    y: y,
+    x1: x1,
+    y1: y1,
     center: {
       x: (x1 - x) / 2 + x,
       y: (y1 - y) / 2 + y,
@@ -622,10 +622,10 @@ export function boxToRectShape(box: { x: number; y: number; x1: number; y1: numb
  * 检查两个矩形是否相交
  */
 export function checkRectIsMerge(rect1: RectShape, rect2: RectShape) {
-  const { left: x1, top: y2, width: width1, height: height1 } = rect1;
+  const { x: x1, y: y2, width: width1, height: height1 } = rect1;
   const x2 = x1 + width1;
   const y1 = y2 + height1;
-  const { left: x3, top: y4, width: width2, height: height2 } = rect2;
+  const { x: x3, y: y4, width: width2, height: height2 } = rect2;
   const x4 = x3 + width2;
   const y3 = y4 + height2;
   // 其实就是先看两个矩形的左边，哪个在中间，然后在中间的这条边，必须位于两个矩形的右边中，靠近左边的边的左边
@@ -634,7 +634,7 @@ export function checkRectIsMerge(rect1: RectShape, rect2: RectShape) {
 }
 /** 从指定 rect 拿到该矩形所有线 */
 export function getLinesFromRect(rect: RectShape) {
-  const { left, right, bottom, top, center, width, height } = rect;
+  const { x: left, x1: right, y1: bottom, y: top, center, width, height } = rect;
   const rectLines: LineShape[] = [
     {
       type: LineDirectionTypes.Horizontal,
@@ -703,23 +703,23 @@ export function findNearbyLinesAtRect(
         result.push(line);
         const rectLineType = rectLine.typeAtRect;
         if (rectLineType === RectLineTypes.Top && line.type === LineDirectionTypes.Horizontal) {
-          nextRect.top = line.y;
+          nextRect.y = line.y;
         }
         if (rectLineType === RectLineTypes.HorizontalCenter && line.type === LineDirectionTypes.Horizontal) {
-          nextRect.top = line.y - nextRect.height / 2;
+          nextRect.y = line.y - nextRect.height / 2;
         }
         if (rectLineType === RectLineTypes.Bottom && line.type === LineDirectionTypes.Horizontal) {
-          nextRect.top = line.y - nextRect.height;
+          nextRect.y = line.y - nextRect.height;
         }
         if (rectLineType === RectLineTypes.Left && line.type === LineDirectionTypes.Vertical) {
-          nextRect.left = line.x;
+          nextRect.x = line.x;
         }
         if (rectLineType === RectLineTypes.VerticalCenter && line.type === LineDirectionTypes.Vertical) {
-          nextRect.left = line.x - nextRect.width / 2;
+          nextRect.x = line.x - nextRect.width / 2;
         }
         if (rectLineType === RectLineTypes.Right && line.type === LineDirectionTypes.Vertical) {
           // console.log("[UTILS]findNearbyLinesAtRect - rect right line");
-          nextRect.left = line.x - nextRect.width;
+          nextRect.x = line.x - nextRect.width;
         }
       }
     }
@@ -766,10 +766,10 @@ function checkTowLinesIsNear(
 export function createEmptyRectShape(rect: Partial<RectShape> = {}) {
   return Object.assign(
     {
-      left: 0,
-      top: 0,
-      bottom: 0,
-      right: 0,
+      x: 0,
+      y: 0,
+      x1: 0,
+      y1: 0,
       width: 0,
       height: 0,
       angle: 0,
@@ -984,7 +984,11 @@ export function buildPath(
       // console.log("[BIZ]before new start point", v0, v1, prev_point);
       prev_point = p;
       const point = BezierPoint({
-        point: Point(p),
+        point: Point({
+          x: p.x,
+          y: p.y,
+          type: PointType.Anchor,
+        }),
         from: null,
         to: null,
         start: true,
@@ -1191,7 +1195,11 @@ export function buildPath(
         prev_point = p;
         // console.log("create point", next_command, next, next_values, p);
         const next_path_point = BezierPoint({
-          point: Point(p),
+          point: Point({
+            x: p.x,
+            y: p.y,
+            type: PointType.Anchor,
+          }),
           from: null,
           to: null,
           virtual: false,
@@ -1239,7 +1247,11 @@ export function buildPath(
         prev_point = p;
         // console.log("create point", next_command, next, next_values, p);
         const next_path_point = BezierPoint({
-          point: Point(p),
+          point: Point({
+            x: p.x,
+            y: p.y,
+            type: PointType.Anchor,
+          }),
           from: null,
           to: null,
           virtual: false,
@@ -1278,7 +1290,13 @@ export function buildPath(
         prev_point = a2;
         if (cur_path_point) {
           // 这里 cur_path_point 其实是 prev_path_point ？？？
-          cur_path_point.setTo(Point(a1));
+          cur_path_point.setTo(
+            Point({
+              x: a1.x,
+              y: a1.y,
+              type: PointType.Control,
+            })
+          );
           if (cur_path_point.from) {
             const collinear = isCollinear(cur_path_point.from.pos, cur_path_point.point.pos, a1);
             cur_path_point.setMirror(BezierPointMirrorTypes.NoMirror);
@@ -1292,8 +1310,16 @@ export function buildPath(
         }
         // console.log("create point", next_command, a2);
         const next_path_point = BezierPoint({
-          point: Point(a2),
-          from: Point(a3),
+          point: Point({
+            x: a2.x,
+            y: a2.y,
+            type: PointType.Anchor,
+          }),
+          from: Point({
+            x: a3.x,
+            y: a3.y,
+            type: PointType.Control,
+          }),
           to: null,
           virtual: false,
         });
@@ -1324,12 +1350,18 @@ export function buildPath(
           }
           prev_point = a3;
           const a1 = findSymmetricPoint(cur_path_point.point.pos, cur_path_point.from.pos);
-          cur_path_point.setTo(Point(a1));
+          cur_path_point.setTo(
+            Point({
+              x: a1.x,
+              y: a1.y,
+              type: PointType.Control,
+            })
+          );
           cur_path_point.setMirror(BezierPointMirrorTypes.MirrorAngleAndLength);
           // console.log("before create next_path_point", a2, a3);
           const next_path_point = BezierPoint({
-            point: Point({ x: a3.x, y: a3.y }),
-            from: Point({ x: a2.x, y: a2.y }),
+            point: Point({ x: a3.x, y: a3.y, type: PointType.Anchor }),
+            from: Point({ x: a2.x, y: a2.y, type: PointType.Control }),
             to: null,
             virtual: false,
           });
@@ -1359,8 +1391,16 @@ export function buildPath(
         }
         prev_point = a2;
         const next_path_point = BezierPoint({
-          point: Point(a2),
-          from: Point(a1),
+          point: Point({
+            x: a2.x,
+            y: a2.y,
+            type: PointType.Anchor,
+          }),
+          from: Point({
+            x: a1.x,
+            y: a1.y,
+            type: PointType.Control,
+          }),
           to: null,
           virtual: false,
         });
@@ -1391,8 +1431,16 @@ export function buildPath(
             y: prev_y + (prev_y - prev_from_y),
           };
           const next_path_point = BezierPoint({
-            point: Point(a2),
-            from: Point(a1),
+            point: Point({
+              x: a2.x,
+              y: a2.y,
+              type: PointType.Anchor,
+            }),
+            from: Point({
+              x: a1.x,
+              y: a1.y,
+              type: PointType.Control,
+            }),
             to: null,
             virtual: false,
           });

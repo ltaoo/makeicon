@@ -1,7 +1,8 @@
 import { base, Handler } from "@/domains/base";
 
-import { createEmptyRectShape, degToRadian, getAngle, getNewStyle, uuidFactory } from "./utils";
+import { checkPosInBox, createEmptyRectShape, degToRadian, getAngle, calcNewStyleOfTransformingBox, uuidFactory } from "./utils";
 import { Position, RectShape, Size } from "./types";
+import { CursorType } from "./constants";
 
 const uuid = uuidFactory();
 
@@ -34,6 +35,7 @@ type CanvasObjectProps = {
     onEndRotate?: (result: { diff: RectShape }) => void;
     onStartPress?: () => void;
     onEndPress?: () => void;
+    onCursorChange?: (v: CursorType) => void;
   };
 };
 export function CanvasObject(props: CanvasObjectProps) {
@@ -56,9 +58,7 @@ export function CanvasObject(props: CanvasObjectProps) {
   /** 容器尺寸、位置信息 */
   let _client: RectShape = rect;
   /** 开始变换前的位置(用于计算变换的差异值，移动了多少、旋转了多少等) */
-  let _tmpClient: RectShape = rect;
-  /** 临时容器 */
-  let _tmpRect: null | RectShape = null;
+  let _tmpClient: null | RectShape = null;
   /** 变形的额外参数 */
   let _options = options;
   let _initialX = 0;
@@ -89,6 +89,7 @@ export function CanvasObject(props: CanvasObjectProps) {
     StartDrag,
     Dragging,
     FinishDrag,
+    CursorChange,
     Change,
   }
   type TheTypesOfEvents = {
@@ -96,10 +97,15 @@ export function CanvasObject(props: CanvasObjectProps) {
     [Events.Unselect]: void;
     [Events.StartDrag]: { x: number; y: number };
     [Events.Dragging]: { x: number; y: number; dx: number; dy: number };
+    [Events.CursorChange]: CursorType;
     [Events.FinishDrag]: { x: number; y: number };
     [Events.Change]: typeof _state;
   };
   const bus = base<TheTypesOfEvents>();
+
+  if (props.options.onCursorChange) {
+    bus.on(Events.CursorChange, props.options.onCursorChange);
+  }
 
   return {
     state: _state,
@@ -107,8 +113,138 @@ export function CanvasObject(props: CanvasObjectProps) {
     bindNode(node: unknown) {
       _node = node;
     },
+    get client() {
+      // console.log("return client", _tmpClient, _client);
+      if (_tmpClient) {
+        return _tmpClient;
+      }
+      return _client;
+    },
     updateClient(shape: RectShape) {
       _client = shape;
+    },
+    buildEdgeOfBox() {
+      const extra = _tmpClient;
+      const rect = extra
+        ? {
+            x: extra.x,
+            y: extra.y,
+            x1: extra.x1,
+            y1: extra.y1,
+          }
+        : {
+            x: _client.x,
+            y: _client.y,
+            x1: _client.x1,
+            y1: _client.y1,
+          };
+      const squareSize = 7;
+      const halfSize = squareSize / 2;
+      // 矩形的四个角
+      const corners: { x: number; y: number; key: CursorType }[] = [
+        { x: rect.x, y: rect.y, key: "left-top-edge" },
+        { x: rect.x1, y: rect.y, key: "right-top-edge" },
+        { x: rect.x, y: rect.y1, key: "left-bottom-edge" },
+        { x: rect.x1, y: rect.y1, key: "right-bottom-edge" },
+      ];
+      const squares = corners.map((corner) => {
+        return {
+          key: corner.key,
+          x: corner.x - halfSize,
+          y: corner.y - halfSize,
+          x1: corner.x + halfSize,
+          y1: corner.y + halfSize,
+          center: {
+            x: corner.x,
+            y: corner.y,
+          },
+        };
+      });
+      return squares;
+    },
+    calcCursorPosition(pos: { x: number; y: number }): { type: CursorType } | null {
+      // console.log("[BIZ]canvas/object - calcCursorPosition", _client);
+      const { x, y } = pos;
+      const { x: boxX, y: boxY, x1: right, y1: bottom } = _client;
+      const boxX1 = right;
+      const boxY1 = bottom;
+      const topEdge = boxY;
+      const bottomEdge = boxY1;
+      const leftEdge = boxX;
+      const rightEdge = boxX1;
+      const edgeBoxes = this.buildEdgeOfBox();
+      const edgeMargin = 8;
+      for (let i = 0; i < edgeBoxes.length; i += 1) {
+        const box = edgeBoxes[i];
+        const { key, x: edgeX, y: edgeY, x1: edgeX1, y1: edgeY1 } = box;
+        if (
+          x >= edgeX - edgeMargin &&
+          x <= edgeX1 + edgeMargin &&
+          y >= edgeY - edgeMargin &&
+          y <= edgeY1 + edgeMargin
+        ) {
+          return { type: key as CursorType };
+        }
+        const rotateBox: null | { key: CursorType; x: number; y: number; x1: number; y1: number } = (() => {
+          if (key === "left-bottom-edge") {
+            return {
+              key: "left-bottom-rotate",
+              x: edgeX - edgeMargin - edgeMargin,
+              y: edgeY1,
+              x1: edgeX,
+              y1: edgeY1 + edgeMargin + edgeMargin,
+            };
+          }
+          if (key === "left-top-edge") {
+            return {
+              key: "left-top-rotate",
+              x: edgeX - edgeMargin - edgeMargin,
+              y: edgeY - edgeMargin - edgeMargin,
+              x1: edgeX,
+              y1: edgeY,
+            };
+          }
+          if (key === "right-top-edge") {
+            return {
+              key: "right-top-rotate",
+              x: edgeX1,
+              y: edgeY - edgeMargin - edgeMargin,
+              x1: edgeX + edgeMargin + edgeMargin,
+              y1: edgeY,
+            };
+          }
+          if (key === "right-bottom-edge") {
+            return {
+              key: "right-bottom-rotate",
+              x: edgeX1,
+              y: edgeY1,
+              x1: edgeX1 + edgeMargin + edgeMargin,
+              y1: edgeY1 + edgeMargin + edgeMargin,
+            };
+          }
+          return null;
+        })();
+        if (rotateBox && x > rotateBox.x && x < rotateBox.x1 && y > rotateBox.y && y < rotateBox.y1) {
+          return { type: rotateBox.key };
+        }
+      }
+      const sideMargin = 8;
+      if (Math.abs(y - topEdge) <= sideMargin && x >= leftEdge && x <= rightEdge) {
+        return { type: "top-side" };
+      }
+      if (Math.abs(y - bottomEdge) <= sideMargin && x >= leftEdge && x <= rightEdge) {
+        return { type: "bottom-side" };
+      }
+      if (Math.abs(x - leftEdge) <= sideMargin && y >= topEdge && y <= bottomEdge) {
+        return { type: "left-side" };
+      }
+      if (Math.abs(x - rightEdge) <= sideMargin && y >= topEdge && y <= bottomEdge) {
+        return { type: "right-side" };
+      }
+      return null;
+    },
+    checkInBox(pos: { x: number; y: number }) {
+      return checkPosInBox(pos, _client);
     },
     handleMouseDown(pos: { x: number; y: number }) {
       _click_time = new Date().valueOf();
@@ -116,6 +252,16 @@ export function CanvasObject(props: CanvasObjectProps) {
       this.select();
     },
     handleMouseMove(pos: { x: number; y: number }) {
+      if (!_pressing) {
+        const cursor = this.calcCursorPosition(pos);
+        if (cursor) {
+          // console.log("[BIZ]canvas/object - handleMouseMove", cursor);
+          bus.emit(Events.CursorChange, cursor.type);
+          return;
+        }
+        bus.emit(Events.CursorChange, "select-default");
+        return;
+      }
       this.drag(pos);
     },
     handleMouseUp(pos: { x: number; y: number }) {
@@ -173,27 +319,32 @@ export function CanvasObject(props: CanvasObjectProps) {
       const deltaX = x - _initialX;
       const deltaY = y - _initialY;
       // console.log("[DOMAIN]RectAnimationStore - drag", this.rect.left);
-      const { width, height, left, top, angle } = _client;
-      const targetRect = this.completeRect({
-        width,
-        height,
-        left:
-          left +
-          (() => {
-            // @todo 支持锁定某个角度拖动
-            if (enabledAngle === undefined) {
-              return deltaX;
-            }
-            return 0;
-          })(),
-        top: top + deltaY,
+      const { x: left, y: top, x1, y1, angle } = _client;
+      const targetRect = {
+        // x:
+        //   left +
+        //   (() => {
+        //     // @todo 支持锁定某个角度拖动
+        //     if (enabledAngle === undefined) {
+        //       return deltaX;
+        //     }
+        //     return 0;
+        //   })(),
+        x: left + deltaX,
+        y: top + deltaY,
+        x1: x1 + deltaX,
+        y1: y1 + deltaY,
+        width: 0,
+        height: 0,
+        center: {
+          x: 0,
+          y: 0,
+        },
+        index: _client.index,
         angle,
-      });
-      this.setPosition({
-        x: targetRect.left,
-        y: targetRect.top,
-        wait: true,
-      });
+      };
+      _tmpClient = targetRect;
+      // console.log("[BIZ]canvas/object - dragging", _tmpClient.x, left, deltaX);
       // _initialX = x;
       // _initialY = y;
       // if (onDrag) {
@@ -208,11 +359,10 @@ export function CanvasObject(props: CanvasObjectProps) {
       //   });
       //   return updatedRect;
       // }
-      this.setPosition({
-        x: targetRect.left,
-        y: targetRect.top,
-      });
-      // console.log("[DOMAIN]RectAnimationStore - drop", this.rect);
+      // this.setPosition({
+      //   x: targetRect.x,
+      //   y: targetRect.y,
+      // });
       bus.emit(Events.Dragging, { x, y, dx: deltaX, dy: deltaY });
       return targetRect;
     },
@@ -223,12 +373,15 @@ export function CanvasObject(props: CanvasObjectProps) {
       if (onEndPress) {
         onEndPress();
       }
+      if (!_tmpClient) {
+        return;
+      }
       _initialX = 0;
       _initialY = 0;
-      //       _client = { ..._values };
-      // console.log("[DOMAIN]TransformRect - end drag prepare compare");
+      // _client = { ..._values };
+      _client = _tmpClient;
       const diff = this.compare(_client, _tmpClient);
-      _tmpRect = { ..._client };
+      _tmpClient = null;
       if (_dragging === false) {
         return;
       }
@@ -286,14 +439,14 @@ export function CanvasObject(props: CanvasObjectProps) {
       const deltaH = length * Math.sin(beta);
       const ratio = _resizeIsShift && !_options.ratio ? _client.width / _client.height : _options.ratio;
       //     console.log("[DOMAIN]RectAnimation - result", this.rect);
-      const { position, size } = getNewStyle(
+      const { position, size } = calcNewStyleOfTransformingBox(
         _resizeType,
         {
           width: _client.width,
           height: _client.height,
           angle: _client.angle,
-          centerX: _client.left + _client.width / 2,
-          centerY: _client.top + _client.height / 2,
+          centerX: _client.x + _client.width / 2,
+          centerY: _client.y + _client.height / 2,
         },
         deltaW,
         deltaH,
@@ -303,15 +456,17 @@ export function CanvasObject(props: CanvasObjectProps) {
       );
       // console.log("[DOMAIN]RectAnimation - result", position, size);
       const result = {
-        top: position.centerY - size.height / 2,
-        left: position.centerX - size.width / 2,
+        x: position.centerX - size.width / 2,
+        y: position.centerY - size.height / 2,
+        x1: position.centerX - size.width / 2 + size.width,
+        y1: position.centerY - size.height / 2 + size.height,
         width: size.width,
         height: size.height,
         angle: _client.angle,
         index: _client.index,
       };
       // console.log("[DOMAIN]RectAnimation - result", result);
-      _tmpRect = this.completeRect({ ...result });
+      _tmpClient = this.completeRect({ ...result });
       //       this.values = { ...this.tmpRect };
       //       this.emitValuesChange();
       return result as RectShape;
@@ -322,9 +477,12 @@ export function CanvasObject(props: CanvasObjectProps) {
       if (onEndPress) {
         onEndPress();
       }
+      if (!_tmpClient) {
+        return;
+      }
       _initialX = 0;
       _initialY = 0;
-      const result = _tmpRect;
+      const result = _tmpClient;
       if (result === null) {
         return;
       }
@@ -386,13 +544,13 @@ export function CanvasObject(props: CanvasObjectProps) {
       } else if (rotateAngle > 266 && rotateAngle < 274) {
         rotateAngle = 270;
       }
-      _tmpRect = this.completeRect({
+      _tmpClient = this.completeRect({
         ..._client,
         angle: rotateAngle,
       });
       //       this.values = { ...this.tmpRect };
       //       this.emitValuesChange();
-      return _tmpRect;
+      return _tmpClient;
     },
     endRotate() {
       const { onEndRotate, onEndPress } = _options;
@@ -402,10 +560,10 @@ export function CanvasObject(props: CanvasObjectProps) {
       }
       _initialX = 0;
       _initialY = 0;
-      if (_tmpRect === null) {
+      if (_tmpClient === null) {
         return;
       }
-      _client = this.completeRect({ ..._tmpRect });
+      _client = this.completeRect({ ..._tmpClient });
       //       this.values = { ...this.client };
       //       this.emitValuesChange();
       if (_rotating === false) {
@@ -445,14 +603,9 @@ export function CanvasObject(props: CanvasObjectProps) {
       const { x, y, wait = false } = pos;
       _client = this.completeRect({
         ..._client,
-        left: x,
-        top: y,
+        x: x,
+        y: y,
       });
-      if (wait) {
-        return;
-      }
-      //       this.values = { ...this.client };
-      //       this.emitValuesChange();
     },
     /**
      * 设置位置，但是不改变 client 信息
@@ -487,15 +640,15 @@ export function CanvasObject(props: CanvasObjectProps) {
      * 其实只要 left、top、width、height 和 angle，其他值都是根据这四个值推断出来的，属于「派生值」
      */
     completeRect(partialRect: Partial<RectShape>): RectShape {
-      const { left = 0, top = 0, width = 0, height = 0, angle = 0, index = 0 } = partialRect;
+      const { x: left = 0, y: top = 0, width = 0, height = 0, angle = 0, index = 0 } = partialRect;
       return Object.assign(
         createEmptyRectShape(),
         { ..._client },
         {
-          left,
-          right: left + width,
-          top,
-          bottom: top + height,
+          x: left,
+          y: top,
+          x1: left + width,
+          y1: top + height,
           center: {
             x: left + width / 2,
             y: top + height / 2,
@@ -517,11 +670,11 @@ export function CanvasObject(props: CanvasObjectProps) {
     },
     /** 比较两个 rect 形变的差异 */
     compare(curClient: RectShape, prevClient: RectShape) {
-      const { left, top, width, height, angle } = curClient;
-      const { left: prevLeft, top: prevTop, width: prevWidth, height: prevHeight, angle: prevAngle } = prevClient;
+      const { x: left, y: top, width, height, angle } = curClient;
+      const { x: prevLeft, y: prevTop, width: prevWidth, height: prevHeight, angle: prevAngle } = prevClient;
       return this.completeRect({
-        left: left - prevLeft,
-        top: top - prevTop,
+        x: left - prevLeft,
+        y: top - prevTop,
         width: width - prevWidth,
         height: height - prevHeight,
         angle: angle - prevAngle,
@@ -542,6 +695,9 @@ export function CanvasObject(props: CanvasObjectProps) {
     },
     onFinishDrag(handler: Handler<TheTypesOfEvents[Events.FinishDrag]>) {
       return bus.on(Events.FinishDrag, handler);
+    },
+    onCursorChange(handler: Handler<TheTypesOfEvents[Events.CursorChange]>) {
+      return bus.on(Events.CursorChange, handler);
     },
   };
 }

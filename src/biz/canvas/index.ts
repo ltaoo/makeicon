@@ -5,14 +5,13 @@ import { toFixPoint } from "@/biz/bezier_point/utils";
 import { CanvasLayer } from "./layer";
 import { Position } from "./types";
 import { CanvasRangeSelection } from "./range";
-import { buildPath, opentypeCommandsToTokens } from "./utils";
+import { CursorType } from "./constants";
 import { CanvasConverter } from "./converter";
 import { CanvasPointer } from "./mouse";
 import { CanvasModeManage, StatusKeyType, StatusKeys } from "./mode";
 import { PathEditing } from "./path_editing";
 import { CanvasObject } from "./object";
 
-export type CursorType = "select" | "pen";
 const debug = false;
 
 type CanvasProps = {};
@@ -66,20 +65,34 @@ export function Canvas(props: CanvasProps) {
   };
   /** 画布上的图形 */
   let _objects: CanvasObject[] = [];
+  /** 当前选择的图形 */
   let _cur_object: null | Line = null;
+  /** 画布上的图形 */
   let _lines: Line[] = [];
+  let _cursor: CursorType = "select-default";
   let _debug = false;
 
   const _$mode = CanvasModeManage({
     state: "default.select",
+    onChange(v) {
+      _cursor = (() => {
+        if (v === "path_editing.pen") {
+          return "pen-edit";
+        }
+        if (v === "path_editing.close_path") {
+          return "pen-close-path";
+        }
+        if (v === "path_editing.select") {
+          return "select-default";
+        }
+        return "select-default";
+      })();
+    },
   });
 
   const _state = {
-    get cursor(): CursorType {
-      if (_$mode.value === "path_editing.pen") {
-        return "pen";
-      }
-      return "select";
+    get cursor() {
+      return _cursor;
     },
     get mode() {
       return _$mode.value;
@@ -116,6 +129,9 @@ export function Canvas(props: CanvasProps) {
     get paths() {
       return _lines;
     },
+    get object() {
+      return _cur_object;
+    },
     isMode(v: StatusKeys) {
       return _$mode.is(v);
     },
@@ -151,21 +167,21 @@ export function Canvas(props: CanvasProps) {
     setGrid(grid: { x: number; y: number; width?: number; height?: number }) {
       Object.assign(_grid, grid);
     },
-    selectEditingSelect() {
-      // if (_editing_pen && _cur_line_path) {
-      // }
+    /**
+     * 钢笔工具
+     * 对锚点进行选择、移动
+     */
+    selectPathEditingSelect() {
       _$mode.set("path_editing.select");
-      if (_cur_object) {
-        _cur_object.unselect();
-        _cur_object = null;
-      }
-      // _cur_path_point = null;
-      // _cur_point = null;
-      // updatePoints();
+      _$path_editing.startSelect();
       bus.emit(Events.Refresh);
       bus.emit(Events.Change, { ..._state });
     },
-    selectEditingPen() {
+    /**
+     * 钢笔工具
+     * 切换回钢笔工具，表示对锚点进行编辑
+     */
+    selectPathEditingPen() {
       if (_cur_object) {
         _cur_object.unselect();
         _cur_object = null;
@@ -183,6 +199,38 @@ export function Canvas(props: CanvasProps) {
       _$path_editing.complete();
       bus.emit(Events.Refresh);
       bus.emit(Events.Change, { ..._state });
+    },
+    /**
+     * 画布模式
+     * 选择钢笔工具，表示要绘制新的线条
+     */
+    selectDefaultPen() {
+      console.log("[BIZ]canvas/index - selectDefaultPen");
+      if (_cur_object) {
+        _cur_object.unselect();
+        _cur_object = null;
+      }
+      _$mode.set("path_editing.pen");
+      _$path_editing.clear();
+      bus.emit(Events.Refresh);
+      bus.emit(Events.Change, { ..._state });
+    },
+    handleKeyupBackspace() {
+      // console.log("[BIZ]canvas/index - handleKeyupBackspace");
+      if (_$mode.is("default.select")) {
+        if (_cur_object) {
+          _lines = _lines.filter((l) => l !== _cur_object);
+        }
+        bus.emit(Events.Refresh);
+        return;
+      }
+      if (_$mode.is("path_editing.select")) {
+        // console.log("[BIZ]canvas/index - handleKeyupBackspace before deleteCurPoint");
+        _$path_editing.deleteCurPoint();
+      }
+    },
+    tagCurObjectAsCopy() {
+      //
     },
     /**
      * 检查是否有靠近可以吸附的线条
@@ -227,10 +275,10 @@ export function Canvas(props: CanvasProps) {
       return _$converter.buildBezierPathsFromPathString(...args);
     },
     buildWeappCode() {
-      return _$converter.buildWeappCode([]);
+      return _$converter.buildWeappCode(_lines);
     },
     buildPreviewIcons() {
-      return _$converter.buildPreviewIcons([]);
+      return _$converter.buildPreviewIcons(_lines);
     },
     update() {
       bus.emit(Events.Refresh);
@@ -287,7 +335,7 @@ export function Canvas(props: CanvasProps) {
     },
     handleMouseMove(pos: { x: number; y: number }) {
       // const pos = toFixPoint(event);
-      // console.log("[BIZ]canvas/index - handleMouseMove", event, pos);
+      // console.log("[BIZ]canvas/index - handleMouseMove", _cur_object);
       _$pointer.handleMouseMove(pos);
       if (_cur_object) {
         _cur_object.handleMouseMove(pos);
@@ -329,6 +377,28 @@ export function Canvas(props: CanvasProps) {
   const _$pointer = CanvasPointer({ canvas: ins, mode: _$mode });
   const _$selection = CanvasRangeSelection({ pointer: _$pointer });
   const _$path_editing = PathEditing({ canvas: ins, pointer: _$pointer, mode: _$mode });
+  _$pointer.onDoubleClick((pos) => {
+    const matched = (() => {
+      for (let i = 0; i < _lines.length; i += 1) {
+        const line = _lines[i];
+        const inBox = line.inBox(pos);
+        if (inBox) {
+          return line;
+        }
+      }
+      return null;
+    })();
+    if (!matched) {
+      return;
+    }
+    _$path_editing.setLine(matched);
+    _cur_object = null;
+    matched.unselect();
+    matched.setEditing(true);
+    _$mode.set("path_editing.select");
+    bus.emit(Events.Refresh);
+    bus.emit(Events.Change, { ..._state });
+  });
   _$path_editing.onCreateLine((line) => {
     line.onSelect(() => {
       bus.emit(Events.Refresh);
@@ -340,7 +410,24 @@ export function Canvas(props: CanvasProps) {
     line.onDragging(() => {
       bus.emit(Events.Refresh);
     });
+    line.onCursorChange((v) => {
+      if (_cursor === v) {
+        return;
+      }
+      _cursor = v;
+      bus.emit(Events.Change, { ..._state });
+    });
+    // line.onDoubleClick(() => {
+    //   bus.emit(Events.Refresh);
+    // });
     _lines.push(line);
+  });
+  _$path_editing.onCursorChange((v) => {
+    if (_cursor === v) {
+      return;
+    }
+    _cursor = v;
+    bus.emit(Events.Change, { ..._state });
   });
   _$path_editing.onRefresh(() => {
     bus.emit(Events.Refresh);

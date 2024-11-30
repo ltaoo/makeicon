@@ -495,7 +495,7 @@ function arcToCanvasArc(
   const { rx, ry, rotate, end, t1, t2 } = arc;
   let radius = rx;
   const p2 = end;
-  const is_reverse = p1.x > p2.x;
+  const is_reverse = p1.x > p2.x || p1.y > p2.y;
   const distance = distanceOfPoints(p1, p2);
   if (radius < distance / 2) {
     radius = distance / 2;
@@ -525,6 +525,9 @@ function arcToCanvasArc(
   const { start: startAngle, end: endAngle } = calculateCircleArcs2(center, p1, p2);
   const angle = (() => {
     if (t1 === 0 && t2 === 0) {
+      if (startAngle < 0) {
+        return { start: startAngle, end: -((360 * Math.PI) / 180) + endAngle, sweep: 0, _i: 0 };
+      }
       return { start: startAngle, end: endAngle, sweep: 0 };
     }
     if (t1 === 0 && t2 === 1) {

@@ -1,3 +1,5 @@
+import { base, Handler } from "@/domains/base";
+
 type StatusKey = string;
 // @ts-ignore
 export type FullStatusMap = Record<StatusKey, FullStatusMap>;
@@ -19,15 +21,31 @@ export type StatusKeys = StatusKeyType<{
     select: boolean;
     /** 钢笔工具 */
     pen: boolean;
+    /** 闭合路径 */
+    close_path: boolean;
+    /** 在路径上添加锚点 */
+    add_point: boolean;
   };
 }>;
 
-export function CanvasModeManage(props: { state: StatusKeys }) {
+export function CanvasModeManage(props: { state: StatusKeys; onChange?: (v: StatusKey) => void }) {
   const { state } = props;
 
   let _state = state;
   let _prev: null | StatusKeys = null;
   let _cache: Partial<Record<StatusKeys, boolean>> = {};
+
+  enum Events {
+    Change,
+  }
+  type TheTypesOfEvents = {
+    [Events.Change]: typeof _state;
+  };
+  const bus = base<TheTypesOfEvents>();
+
+  if (props.onChange) {
+    bus.on(Events.Change, props.onChange);
+  }
 
   return {
     get value() {
@@ -59,6 +77,11 @@ export function CanvasModeManage(props: { state: StatusKeys }) {
     },
     set(v: StatusKeys) {
       _state = v;
+      bus.emit(Events.Change, _state);
+    },
+
+    onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
+      return bus.on(Events.Change, handler);
     },
   };
 }

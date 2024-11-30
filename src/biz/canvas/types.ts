@@ -53,25 +53,25 @@ interface CanvasContentWithoutType {
   /** 唯一值 */
   id: number;
   /** 包裹内容的容器实例 */
-//   rect: TransformRect;
+  //   rect: TransformRect;
 }
 /** 画布内容 */
 export type CanvasThingShape = MutableRecord2<{
-//   [CanvasThingTypes.Text]: {
-//     data: TextDomain;
-//   } & CanvasContentWithoutType;
-//   [CanvasThingTypes.Image]: {
-//     /** 内容 */
-//     data: ImageDomain;
-//   } & CanvasContentWithoutType;
+  //   [CanvasThingTypes.Text]: {
+  //     data: TextDomain;
+  //   } & CanvasContentWithoutType;
+  //   [CanvasThingTypes.Image]: {
+  //     /** 内容 */
+  //     data: ImageDomain;
+  //   } & CanvasContentWithoutType;
 }>;
 
 /** 矩形盒子尺寸、位置信息 */
 export interface RectShape {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
+  x: number;
+  x1: number;
+  y: number;
+  y1: number;
   center: {
     x: number;
     y: number;

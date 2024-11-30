@@ -79,7 +79,8 @@ export function connectLayer(
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
     ctx.closePath();
-    ctx.strokeStyle = "blue";
+    ctx.strokeStyle = "#9e9eff";
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fillStyle = "white";
     ctx.fill();
@@ -90,7 +91,10 @@ export function connectLayer(
     // @ts-ignore
     ctx.fillText(`${x},${y}`, x + 2, y - 2);
   };
-  layer.drawRect = (rect: { x: number; y: number; x1: number; y1: number }) => {
+  layer.drawRect = (
+    rect: { x: number; y: number; x1: number; y1: number },
+    extra: Partial<{ background: string }> = {}
+  ) => {
     ctx.beginPath();
     ctx.moveTo(rect.x, rect.y);
     ctx.lineTo(rect.x1, rect.y);
@@ -100,13 +104,17 @@ export function connectLayer(
     ctx.lineWidth = 1;
     ctx.strokeStyle = "blue";
     ctx.stroke();
+    if (extra.background) {
+      ctx.fillStyle = extra.background;
+      ctx.fill();
+    }
   };
   layer.drawLabel = (point: Point) => {
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
     const x = point.x;
     const y = point.y;
-    ctx.fillText(`${point.uid}|${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
+    ctx.fillText(`${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
   };
   layer.drawPoints = (points: Point[]) => {
     console.log("layer.drawPoints", points.length);
@@ -120,7 +128,7 @@ export function connectLayer(
       ctx.fillText(`(${i})、${x},${y}`, x + 2, y - 2);
     });
   };
-  layer.drawDiamondAtLineEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
+  layer.drawDiamondAtLineEnd = (p1: Point, p2: Point) => {
     const size = 3;
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
@@ -143,7 +151,8 @@ export function connectLayer(
     ctx.lineTo(diamondBottomX, diamondBottomY);
     ctx.lineTo(diamondLeftX, diamondLeftY);
     ctx.closePath();
-    ctx.strokeStyle = "#9e9eff";
+    ctx.strokeStyle = p2.highlighted ? "red" : "#9e9eff";
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fillStyle = "white";
     ctx.fill();

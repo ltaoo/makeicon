@@ -61,7 +61,7 @@ export function PathSegment(props: PathSegmentProps) {
       });
     },
     box() {
-      console.log("[BIZ]path/segment - box", _virtual, !!_bezier);
+      // console.log("[BIZ]path/segment - box", _virtual, !!_bezier);
       if (_virtual) {
         return null;
       }
@@ -69,7 +69,7 @@ export function PathSegment(props: PathSegmentProps) {
         return null;
       }
       _bezier.update();
-      console.log("[BIZ]path/segment - box", _bezier.points);
+      // console.log("[BIZ]path/segment - box", _bezier.points);
       return _bezier.bbox();
     },
     /** 一条线段的终点确定下来了 */

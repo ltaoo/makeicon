@@ -126,6 +126,8 @@ export class Application<T extends { storage: StorageCore<any> }> extends BaseDo
     width: 0,
     height: 0,
   };
+  /** 当前按下的键 */
+  keyboard: Record<string, boolean> = {};
   env: {
     wechat: boolean;
     ios: boolean;
@@ -269,9 +271,12 @@ export class Application<T extends { storage: StorageCore<any> }> extends BaseDo
   }
   /** 平台相关的全局事件 */
   keydown(code: string) {
+    this.keyboard[code] = true;
+    // console.log("[DOMAIN]app - keydown", code, this.keyboard);
     this.emit(Events.Keydown, { code });
   }
   keyup(code: string) {
+    delete this.keyboard[code];
     if (code === "Escape") {
       this.escape();
     }

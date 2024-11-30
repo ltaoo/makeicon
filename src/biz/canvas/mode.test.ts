@@ -14,7 +14,7 @@ type StatusKeys = StatusKeyType<{
 
 describe("is method", () => {
   it("is cur", () => {
-    const _$mode = CanvasModeManage<StatusKeys>({
+    const _$mode = CanvasModeManage({
       state: "default.select",
     });
     const is = _$mode.is("default.select");
@@ -22,7 +22,7 @@ describe("is method", () => {
     expect(is).toBe(true);
   });
   it("is parent", () => {
-    const _$mode = CanvasModeManage<StatusKeys>({
+    const _$mode = CanvasModeManage({
       state: "default.select",
     });
     const is = _$mode.is("default");
@@ -31,7 +31,7 @@ describe("is method", () => {
   });
 
   it("not the cur", () => {
-    const _$mode = CanvasModeManage<StatusKeys>({
+    const _$mode = CanvasModeManage({
       state: "default.select",
     });
     const is = _$mode.is("path_editing.select");
@@ -40,7 +40,7 @@ describe("is method", () => {
   });
 
   it("not parent", () => {
-    const _$mode = CanvasModeManage<StatusKeys>({
+    const _$mode = CanvasModeManage({
       state: "default.select",
     });
     const is = _$mode.is("path_editing");
@@ -51,7 +51,7 @@ describe("is method", () => {
 
 describe("set method", () => {
   it("set", () => {
-    const _$mode = CanvasModeManage<StatusKeys>({
+    const _$mode = CanvasModeManage({
       state: "default.select",
     });
     _$mode.set("default.pen");

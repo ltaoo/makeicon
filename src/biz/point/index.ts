@@ -2,6 +2,7 @@
  * @file 纯粹的坐标点
  */
 import { base, Handler } from "@/domains/base";
+import { BezierPoint } from "@/biz/bezier_point";
 
 enum Events {
   Move,
@@ -12,29 +13,33 @@ type TheTypesOfEvents = {
 type PointProps = {
   x: number;
   y: number;
+  type: PointType;
 };
-
+export enum PointType {
+  /** 锚点，改变线条位置 */
+  Anchor,
+  /** 控制点，改变线条曲率 */
+  Control,
+}
 export function Point(props: PointProps) {
-  const bus = base<TheTypesOfEvents>();
+  const { x, y, type  } = props;
 
-  const { x, y } = props;
-
-  let _uid = bus.uid();
   let _x = x;
   let _y = y;
   let _start: null | { x: number; y: number } = null;
+  let _type = type;
+  let _selected = false;
+  let _highlighted = false;
 
   const _state = {
     x: _x,
     y: _y,
     selected: false,
   };
+  const bus = base<TheTypesOfEvents>();
 
   return {
     SymbolTag: "Point" as const,
-    get uid() {
-      return _uid;
-    },
     get x() {
       return _x;
     },
@@ -47,8 +52,26 @@ export function Point(props: PointProps) {
         y: _y,
       };
     },
+    get type() {
+      return _type;
+    },
     get state() {
       return _state;
+    },
+    get selected() {
+      return _selected;
+    },
+    select() {
+      _selected = true;
+    },
+    unselect() {
+      _selected = false;
+    },
+    get highlighted() {
+      return _selected;
+    },
+    setHighlight(v: boolean) {
+      _highlighted = v;
     },
     // setXY(x: number, y: number, options: Partial<{ silence: boolean }> = {}) {
     //   _x = x;

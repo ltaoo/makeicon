@@ -1,3 +1,21 @@
+export type CursorType =
+  | "select-default"
+  | "pen-edit"
+  | "pen-close-path"
+  | "pen-add-point"
+  | "left-top-edge"
+  | "right-top-edge"
+  | "left-bottom-edge"
+  | "right-bottom-edge"
+  | "top-side"
+  | "left-side"
+  | "right-side"
+  | "bottom-side"
+  | "left-top-rotate"
+  | "right-top-rotate"
+  | "left-bottom-rotate"
+  | "right-bottom-rotate";
+
 export const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
 
 /** 画布内容类型 */

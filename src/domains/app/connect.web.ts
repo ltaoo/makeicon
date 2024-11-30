@@ -53,10 +53,8 @@ export function connect<T extends { storage: StorageCore<any> }>(app: Applicatio
   window.addEventListener("blur", () => {
     app.emit(app.Events.Blur);
   });
-  const keycodes: Record<string, boolean> = {};
   document.addEventListener("keydown", (event) => {
-    // console.log(event.code);
-    keycodes[event.code] = true;
+    // console.log("[DOMAIN]app/connect - keydown", event.code);
     app.keydown(event.code);
     // (() => {
     //   if (event.code === "KeyC" && (keycodes.ControlLeft || keycodes.ControlRight)) {
@@ -64,8 +62,6 @@ export function connect<T extends { storage: StorageCore<any> }>(app: Applicatio
     // })();
   });
   document.addEventListener("keyup", (event) => {
-    keycodes[event.code] = false;
-    // console.log('key up', event.code);
     app.keyup(event.code);
   });
   document.addEventListener("visibilitychange", () => {
