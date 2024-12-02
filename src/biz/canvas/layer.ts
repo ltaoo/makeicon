@@ -1,6 +1,9 @@
 import { base, Handler } from "@/domains/base";
 import { Point } from "@/biz/point";
+import { LinearGradientPayload } from "@/biz/svg/path-parser";
 import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
+import { Result } from "@/domains/result";
+
 import { uuidFactory } from "./utils";
 
 type CanvasLayerProps = {
@@ -36,7 +39,6 @@ export function CanvasLayer(props: CanvasLayerProps) {
   if (props.onMounted) {
     onMounted(props.onMounted);
   }
-
   const _self = {
     SymbolTag: "CanvasLayer" as const,
     drawLine(p1: { x: number; y: number }, p2: { x: number; y: number }) {
@@ -60,8 +62,34 @@ export function CanvasLayer(props: CanvasLayerProps) {
     drawPoints(points: Point[]) {
       console.log("请实现 drawPoints 方法");
     },
+    drawImage(...args: unknown[]) {
+      console.log("请实现 drawImage 方法");
+    },
     drawGrid(callback: Function) {
       console.log("请实现 drawGrid 方法");
+    },
+    drawTransparentBackground(callback?: Function) {
+      console.log("请实现 drawTransparentBackground 方法");
+    },
+    drawBackground(opt: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      colors: { step: number; color: string }[];
+    }) {
+      console.log("请实现 drawBackground 方法");
+    },
+    drawRoundedRect(opt: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rx: number;
+      ry: number;
+      colors: { step: number; color: string }[];
+    }) {
+      console.log("请实现 drawRoundedRect 方法");
     },
     clear() {
       console.log("请实现 clear 方法");
@@ -105,7 +133,7 @@ export function CanvasLayer(props: CanvasLayerProps) {
     setGlobalCompositeOperation(v: PathCompositeOperation) {
       console.log("请实现 setGlobalCompositeOperation 方法");
     },
-    setFillStyle(v: string) {
+    setFillStyle(v: any) {
       console.log("请实现 setFillStyle 方法");
     },
     fill() {
@@ -122,6 +150,18 @@ export function CanvasLayer(props: CanvasLayerProps) {
     },
     restore() {
       console.log("请实现 restore 方法");
+    },
+    getGradient(payload: LinearGradientPayload): any {
+      console.log("请实现 getGradient 方法");
+      return null;
+    },
+    getCanvas(): unknown {
+      console.log("请实现 getCanvas 方法");
+      return null;
+    },
+    getBlob(type: string, quality?: string): Promise<Result<Blob>> {
+      console.log("请实现 getCanvas 方法");
+      return Promise.resolve(Result.Err("请实现 getCanvas 方法"));
     },
     log(...args: string[]) {
       log(...args);

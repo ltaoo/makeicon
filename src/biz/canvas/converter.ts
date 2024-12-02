@@ -283,7 +283,7 @@ export function CanvasConverter(props: {
       if (!svg) {
         return [];
       }
-      console.log("[BIZ]canvas - preview", svg);
+      // console.log("[BIZ]canvas - preview", svg);
       svg.width = 64;
       svg.height = 64;
       const str1 = objectToHTML(svg);
@@ -335,7 +335,7 @@ export function CanvasConverter(props: {
         exp: false,
         scale: dimensions ? _grid.width / dimensions.width : 1,
       };
-      // console.log("extra", xExtra.scale, yExtra.scale, dimensions, _grid.width, _grid.height);
+      console.log("[BIZ]canvas/convert - buildBezierPathsFromPathString", data);
       for (let j = 0; j < data.paths.length; j += 1) {
         const payload = data.paths[j];
         const content = payload.d;
@@ -361,6 +361,7 @@ export function CanvasConverter(props: {
       return {
         paths: lines,
         dimensions: data.dimensions,
+        gradients: data.linearGradients,
       };
     },
     buildPath(path: Line, tokens: string[][], extra: {}) {

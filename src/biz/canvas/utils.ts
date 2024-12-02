@@ -933,7 +933,7 @@ export function buildPath(
     p.x += prev_point.x;
     p.y += prev_point.y;
   }
-  // console.log("tokens", tokens, payload);
+  // console.log("tokens", tokens);
   for (let i = 0; i < tokens.length; i += 1) {
     const prev = tokens[i - 1];
     const cur = tokens[i];
@@ -1043,7 +1043,7 @@ export function buildPath(
       cur_path = new_path;
     }
     if (["Z", "z"].includes(command)) {
-      console.log("[BIZ]command is Z", cur_path);
+      // console.log("[BIZ]command is Z", cur_path);
       if (start_path_point) {
         start_path_point.setEnd(true);
         start_path_point.setClosed();
@@ -1081,9 +1081,9 @@ export function buildPath(
           t2,
           end: p2,
         };
-        console.log("[BIZ]canvas / before arc_to_curve", start, arc);
-        const pointsArr = arc_to_curve(start, arc);
-        console.log("after arc_to_curve", start, pointsArr);
+        console.log("[BIZ]canvas / before arc_to_curve", start, arc, next_values);
+        const pointsArr = arc_to_curve(start, arc).slice(0, 2); // 如果半圆有一点点偏差，出现三个元素，就不对了，只需要前两个元素即可组成半圆
+        console.log("[BIZ]canvas / after arc_to_curve", pointsArr);
         let inner_cur_path_point: BezierPoint | null = null;
         for (let k = 0; k < pointsArr.length; k += 1) {
           const inner_cur = pointsArr[k];

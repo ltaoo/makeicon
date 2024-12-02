@@ -14,15 +14,20 @@ type DragZoneProps = {
 };
 type DragZoneState = {
   hovering: boolean;
+  selected: boolean;
+  files: File[];
 };
 
 export class DragZoneCore extends BaseDomain<TheTypesOfEvents> {
-  hovering: boolean = false;
-  files: File[] = [];
+  _hovering: boolean = false;
+  _selected: boolean = false;
+  _files: File[] = [];
 
   get state(): DragZoneState {
     return {
-      hovering: this.hovering,
+      hovering: this._hovering,
+      selected: this._selected,
+      files: this._files,
     };
   }
 
@@ -36,24 +41,27 @@ export class DragZoneCore extends BaseDomain<TheTypesOfEvents> {
   }
 
   handleDragover() {
-    this.hovering = true;
+    this._hovering = true;
     this.emit(Events.StateChange, { ...this.state });
   }
   handleDragleave() {
-    this.hovering = false;
+    this._hovering = false;
     this.emit(Events.StateChange, { ...this.state });
   }
   handleDrop(files: File[]) {
-    this.hovering = false;
+    this._hovering = false;
     if (!files || files.length === 0) {
+      this._selected = false;
+      this._files = [];
       return;
     }
-    this.files = files;
+    this._files = files;
+    this._selected = true;
     this.emit(Events.Change, [...files]);
     this.emit(Events.StateChange, { ...this.state });
   }
   getFileByName(name: string) {
-    return this.files.find((f) => f.name === name);
+    return this._files.find((f) => f.name === name);
   }
 
   onStateChange(handler: Handler<TheTypesOfEvents[Events.StateChange]>) {

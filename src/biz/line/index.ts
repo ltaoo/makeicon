@@ -45,15 +45,21 @@ export function Line(props: PathProps) {
     join: "miter" as LineJoinType,
   };
   if (stroke) {
-    _stroke.color = stroke.color;
-    _stroke.width = stroke.width;
-    if (stroke.cap) {
-      _stroke.start_cap = stroke.cap as LineCapType;
-      _stroke.end_cap = stroke.cap as LineCapType;
-    }
-    if (stroke.join) {
-      _stroke.join = stroke.join as LineJoinType;
-    }
+    (() => {
+      if (stroke.color === "none") {
+        _stroke.enabled = false;
+        return;
+      }
+      _stroke.color = stroke.color;
+      _stroke.width = stroke.width;
+      if (stroke.cap) {
+        _stroke.start_cap = stroke.cap as LineCapType;
+        _stroke.end_cap = stroke.cap as LineCapType;
+      }
+      if (stroke.join) {
+        _stroke.join = stroke.join as LineJoinType;
+      }
+    })();
   }
   let _fill = {
     enabled: !!fill,

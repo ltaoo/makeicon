@@ -31,15 +31,16 @@ export function ColorInputCore(props: ColorInputCoreProps) {
   };
   const bus = base<TheTypesOfEvents>();
 
-  const $input = new InputCore({
+  const $hex = new InputCore({
     type: "color",
+    // value: "#000000",
     defaultValue: "#000000",
   });
   const $opacity = new InputCore({
     type: "number",
     defaultValue: 100,
   });
-  $input.onChange((event) => {
+  $hex.onChange((event) => {
     _value = event;
     bus.emit(Events.Change, { ..._state });
   });
@@ -54,7 +55,7 @@ export function ColorInputCore(props: ColorInputCoreProps) {
 
   return {
     state: _state,
-    $input,
+    $input: $hex,
     $opacity,
     setValue(v: string) {
       _value = v;
@@ -68,6 +69,7 @@ export function ColorInputCore(props: ColorInputCoreProps) {
       _visible = !_visible;
       bus.emit(Events.Change, { ..._state });
     },
+    handleRemove() {},
     onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
       return bus.on(Events.Change, handler);
     },

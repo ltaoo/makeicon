@@ -68,6 +68,29 @@ Z (closepath) :
  *
  */
 
+export type PathPayload = {
+  d: string;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  lineCap?: string;
+  lineJoin?: string;
+  from?: string;
+};
+export type LinearGradientPayload = {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  stops: {
+    color: string;
+    offset: number;
+  }[];
+};
+function toNum(v?: string) {
+  return Number((v || "").replace("%", ""));
+}
 export class PathParser {
   static components(type: string, path: string, cursor: number): [number, string[][]] {
     const expectedRegexList = kGrammar[type.toUpperCase()];
@@ -106,19 +129,12 @@ export class PathParser {
   }
 
   public static parse_svg(content: string) {
-    type PathPayload = {
-      d: string;
-      fill?: string;
-      stroke?: string;
-      strokeWidth?: number;
-      lineCap?: string;
-      lineJoin?: string;
-    };
     const result = {
       dimensions: {
         width: 0,
         height: 0,
       },
+      linearGradients: [] as LinearGradientPayload[],
       paths: [] as PathPayload[],
     };
     const r1 = /viewBox="([^"]+)"/;
@@ -176,13 +192,50 @@ export class PathParser {
     if (strokeLineJoinMatch) {
       globalSettings.lineJoin = strokeLineJoinMatch[1];
     }
+    // const linearGradientRegex = /<linearGradient([^>]+)\/?>/g;
+    const linearGradientRegex = /<linearGradient([^>]{1,})>([\d\D]{1,}?)<\/linearGradient>/g;
+    const stopRegex = /<stop stop-color="([^"]*)" offset="([^"]*)"\s*\/?>/g;
+    let linearGradientMatch;
+    while ((linearGradientMatch = linearGradientRegex.exec(content)) !== null) {
+      const attributes = linearGradientMatch[1];
+      const stopsContent = linearGradientMatch[2];
+      const idMatch = attributes.match(/id="([^"]*)"/);
+      const x1Match = attributes.match(/x1="([^"]*)"/);
+      const y1Match = attributes.match(/y1="([^"]*)"/);
+      const x2Match = attributes.match(/x2="([^"]*)"/);
+      const y2Match = attributes.match(/y2="([^"]*)"/);
+      if (!idMatch || !x1Match || !x2Match || !y1Match || !y2Match) {
+        continue;
+      }
+      const id = idMatch[1];
+      const x1 = toNum(x1Match[1]) / 100;
+      const y1 = toNum(y1Match[1]) / 100;
+      const x2 = toNum(x2Match[1]) / 100;
+      const y2 = toNum(y2Match[1]) / 100;
+      const stops = [];
+      let stopMatch;
+      while ((stopMatch = stopRegex.exec(stopsContent)) !== null) {
+        stops.push({
+          color: stopMatch[1],
+          offset: toNum(stopMatch[2]) / 100,
+        });
+      }
+      result.linearGradients.push({
+        id,
+        x1,
+        y1,
+        x2,
+        y2,
+        stops,
+      });
+    }
     // find path tag
     const pathRegex = /<path([^>]+)\/?>/g;
     let pathMatch;
     while ((pathMatch = pathRegex.exec(content)) !== null) {
       const attributes = pathMatch[1];
       // console.log("pathAttributes", pathAttributes);
-      const dMatch = attributes.match(/d="([^"]+)"/);
+      const dMatch = attributes.match(/ d="([^"]+)"/);
       const fillMatch = attributes.match(r4);
       const strokeMatch = attributes.match(r5);
       const strokeWidthMatch = attributes.match(r6);
@@ -202,7 +255,10 @@ export class PathParser {
         }
       }
       if (strokeMatch) {
-        payload.stroke = strokeMatch[1];
+        const stroke = strokeMatch[1];
+        if (stroke !== "none") {
+          payload.stroke = stroke;
+        }
       }
       if (strokeWidthMatch) {
         payload.strokeWidth = Number(strokeWidthMatch[1]);
@@ -233,6 +289,7 @@ export class PathParser {
       const width = Number(width_match[1]);
       const height = Number(height_match[1]);
       const payload: PathPayload = {
+        from: "rect",
         d: `M${x} ${y}L${x + width} ${y}L${x + width} ${y + height}L${x} ${y + height}L${x} ${y}Z`,
         ...globalSettings,
       };
@@ -321,6 +378,7 @@ export class PathParser {
         buildCurveString(curve4_c1, curve4_c2, curve4_end),
       ];
       const payload: PathPayload = {
+        from: "circle",
         d: `M${curve1_start.x} ${curve1_start.y}${commands.join("")}Z`,
         ...globalSettings,
       };
@@ -352,19 +410,119 @@ export class PathParser {
         return `L${point.x} ${point.y}`;
       }
       const payload: PathPayload = {
+        from: "polygon",
         d: `M${start.x} ${start.y}${points.map((point) => buildLine(point)).join("")}Z`,
         ...globalSettings,
       };
+      result.paths.push(payload);
+    }
+    const ellipseRegexp = /<ellipse([^>]+)\/?>/g;
+    let ellipseMatch;
+    while ((ellipseMatch = ellipseRegexp.exec(content)) !== null) {
+      // console.log("[BIZ]svg/path-parser - there is ellipse");
+      const attributes = ellipseMatch[1];
+      const x_match = attributes.match(/cx="([^"]{1,})"/);
+      const y_match = attributes.match(/cy="([^"]{1,})"/);
+      const rx_match = attributes.match(/rx="([^"]{1,})"/);
+      const ry_match = attributes.match(/ry="([^"]{1,})"/);
+      const fillMatch = attributes.match(r4);
+      // console.log("[BIZ]svg/path-parser - check the ellipse is validated", x_match, y_match, rx_match, ry_match);
+      if (!x_match || !y_match || !rx_match || !ry_match) {
+        continue;
+      }
+      const x = Number(x_match[1]);
+      const y = Number(y_match[1]);
+      const rx = Number(rx_match[1]);
+      const ry = Number(ry_match[1]);
+      const controller_length = rx * CurveLikeCircleRatio;
+      const curve1_start = {
+        x: x,
+        y: y - rx,
+      };
+      const curve1_c1 = {
+        x: x + controller_length,
+        y: y - rx,
+      };
+      const curve1_c2 = {
+        x: x + rx,
+        y: y - controller_length,
+      };
+      const curve1_end = {
+        x: x + rx,
+        y,
+      };
+      const curve2_c1 = {
+        x: x + rx,
+        y: y + controller_length,
+      };
+      const curve2_c2 = {
+        x: x + controller_length,
+        y: y + rx,
+      };
+      const curve2_end = {
+        x: x,
+        y: y + rx,
+      };
+      const curve3_c1 = {
+        x: x - controller_length,
+        y: y + rx,
+      };
+      const curve3_c2 = {
+        x: x - rx,
+        y: y + controller_length,
+      };
+      const curve3_end = {
+        x: x - rx,
+        y: y,
+      };
+      const curve4_c1 = {
+        x: x - rx,
+        y: y - controller_length,
+      };
+      const curve4_c2 = {
+        x: x - controller_length,
+        y: y - rx,
+      };
+      const curve4_end = {
+        x: x,
+        y: y - rx,
+      };
+      function buildCurveString(
+        c1: { x: number; y: number },
+        c2: { x: number; y: number },
+        end: { x: number; y: number }
+      ) {
+        return `C${[c1.x, c1.y, c2.x, c2.y, end.x, end.y].join(" ")}`;
+      }
+      const commands = [
+        buildCurveString(curve1_c1, curve1_c2, curve1_end),
+        buildCurveString(curve2_c1, curve2_c2, curve2_end),
+        buildCurveString(curve3_c1, curve3_c2, curve3_end),
+        buildCurveString(curve4_c1, curve4_c2, curve4_end),
+      ];
+      const payload: PathPayload = {
+        from: "ellipse",
+        d: `M${curve1_start.x} ${curve1_start.y}${commands.join("")}Z`,
+        ...globalSettings,
+      };
+      if (fillMatch) {
+        const fill = fillMatch[1];
+        if (fill !== "none") {
+          payload.fill = fill;
+        }
+      }
       result.paths.push(payload);
     }
     return result;
   }
 
   public static parse(path: string): string[][] {
+    // console.log("[BIZ]svg/path-parse - parse", path);
     let cursor = 0;
     let tokens: string[][] = [];
     while (cursor < path.length) {
       const match = path.slice(cursor).match(kCommandTypeRegex);
+      // console.log(cursor, match);
       if (match !== null) {
         const command = match[1];
         cursor += match[0].length;

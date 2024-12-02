@@ -1,6 +1,7 @@
 import { base, Handler } from "@/domains/base";
 import { Line } from "@/biz/line";
 import { toFixPoint } from "@/biz/bezier_point/utils";
+import { LinearGradientPayload } from "@/biz/svg/path-parser";
 
 import { CanvasLayer } from "./layer";
 import { Position } from "./types";
@@ -22,6 +23,8 @@ export function Canvas(props: CanvasProps) {
     grid: CanvasLayer;
     path: CanvasLayer;
     graph: CanvasLayer;
+    background: CanvasLayer;
+    frame: CanvasLayer;
   } = {
     // 绘制了选框
     range: CanvasLayer({
@@ -32,11 +35,7 @@ export function Canvas(props: CanvasProps) {
     grid: CanvasLayer({
       zIndex: 998,
       disabled: true,
-      onMounted(layer) {
-        layer.drawGrid(() => {
-          console.log("The Grid has Draw");
-        });
-      },
+      onMounted() {},
     }),
     // 绘制了锚点、路径
     path: CanvasLayer({
@@ -45,6 +44,42 @@ export function Canvas(props: CanvasProps) {
     // 绘制了填充、描边
     graph: CanvasLayer({
       zIndex: 9,
+    }),
+    background: CanvasLayer({
+      zIndex: 0,
+      onMounted(layer) {
+        const grid = _grid;
+        layer.drawRoundedRect({
+          x: grid.x,
+          y: grid.y,
+          rx: 60,
+          ry: 60,
+          width: grid.width,
+          height: grid.height,
+          colors: [
+            { step: 0, color: "#ffa1ed" },
+            { step: 1, color: "#9147ff" },
+          ],
+        });
+      },
+    }),
+    frame: CanvasLayer({
+      zIndex: 0,
+      onMounted(layer) {
+        const grid = _grid;
+        const { width, height } = _size;
+        const start = {
+          x: width / 2 - grid.width / 2,
+          y: height / 2 - grid.height / 2,
+        };
+        // layer.drawBackground({
+        //   x: start.x,
+        //   y: start.y,
+        //   width: grid.width,
+        //   height: grid.height,
+        //   colors: [{ step: 0, color: "white" }],
+        // });
+      },
     }),
   };
   let _cur_layer = _layers.graph;
@@ -63,6 +98,7 @@ export function Canvas(props: CanvasProps) {
     lineWidth: 0.5,
     color: "#cccccc",
   };
+  let _gradients: LinearGradientPayload[] = [];
   /** 画布上的图形 */
   let _objects: CanvasObject[] = [];
   /** 当前选择的图形 */
@@ -150,7 +186,14 @@ export function Canvas(props: CanvasProps) {
       return _size;
     },
     setSize(size: { width: number; height: number }) {
+      const { width, height } = size;
+      const start = {
+        x: width / 2 - _grid.width / 2,
+        y: height / 2 - _grid.height / 2,
+      };
       Object.assign(_size, size);
+      _grid.x = start.x;
+      _grid.y = start.y;
     },
     get mounted() {
       return _mounted;
@@ -261,7 +304,24 @@ export function Canvas(props: CanvasProps) {
     //   );
     //   return [nextRect, lines];
     // },
-    appendObject() {},
+    saveGradients(gradients: LinearGradientPayload[]) {
+      console.log("[BIZ]canvas/index - saveGradient", _gradients);
+      _gradients = gradients;
+    },
+    getGradient(id: string) {
+      console.log("[BIZ]canvas/index - getGradient", id, _gradients);
+      return _gradients.find((g) => g.id === id);
+    },
+    appendObject(
+      paths: Line[],
+      extra: Partial<{ transform: boolean; dimensions: { width: number; height: number } }> = {}
+    ) {
+      _lines = paths;
+      // _lines = this.format(paths);
+      // _paths = _lines.reduce((prev, cur) => {
+      //   return prev.concat(cur.paths);
+      // }, [] as LinePath[]);
+    },
     inGrid(pos: { x: number; y: number }) {
       if (pos.x >= _grid.x && pos.x <= _grid.x + _grid.width && pos.y >= _grid.y && pos.y <= _grid.y + _grid.height) {
         return true;
@@ -276,6 +336,9 @@ export function Canvas(props: CanvasProps) {
     },
     buildWeappCode() {
       return _$converter.buildWeappCode(_lines);
+    },
+    buildSVG() {
+      return _$converter.buildSVG(_lines);
     },
     buildPreviewIcons() {
       return _$converter.buildPreviewIcons(_lines);

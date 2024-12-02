@@ -267,7 +267,6 @@ export function LinePath(props: BezierPathProps) {
      */
     appendPoint(point: BezierPoint) {
       const prev = _path_points[_path_points.length - 1];
-      console.log("[BIZ]path/index - appendPoint", !!prev);
       if (prev) {
         prev.setEnd(false);
       }

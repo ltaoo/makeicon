@@ -1,8 +1,11 @@
 import { Point } from "@/biz/point";
 import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
+import { LinearGradientPayload } from "@/biz/svg/path-parser";
+import { Result } from "@/domains/result";
 
 import { Canvas } from "./index";
 import { CanvasLayer } from "./layer";
+import { drawFigmaSmoothCorners } from "./corner";
 
 export function connect(store: Canvas, $canvas: HTMLDivElement) {
   if (store.mounted) {
@@ -12,15 +15,15 @@ export function connect(store: Canvas, $canvas: HTMLDivElement) {
   // $canvas.width = width * dpr;
   // $canvas.height = height * dpr;
 
-  const { innerWidth, innerHeight } = window;
-  const width = innerWidth;
-  const height = innerHeight;
+  // const { innerWidth, innerHeight } = window;
+  // const width = innerWidth;
+  // const height = innerHeight;
   // const width = innerWidth * dpr;
   // const height = innerHeight * dpr;
-  store.setSize({
-    width,
-    height,
-  });
+  // store.setSize({
+  //   width,
+  //   height,
+  // });
   store.setDPR(dpr);
   // $canvas.width = width;
   // $canvas.height = height;
@@ -89,7 +92,7 @@ export function connectLayer(
     const x = point.x;
     const y = point.y;
     // @ts-ignore
-    ctx.fillText(`${x},${y}`, x + 2, y - 2);
+    // ctx.fillText(`${x},${y}`, x + 2, y - 2);
   };
   layer.drawRect = (
     rect: { x: number; y: number; x1: number; y1: number },
@@ -109,12 +112,45 @@ export function connectLayer(
       ctx.fill();
     }
   };
+  layer.drawImage = (
+    img: HTMLImageElement,
+    start: { x: number; y: number },
+    size?: { width: number; height: number },
+    start2?: { x: number; y: number },
+    size2?: { width: number; height: number }
+  ) => {
+    // let args = [img, start.x, start.y] as [HTMLImageElement, number, number];
+    // if (size) {
+    //   args = [img, start.x, start.y, size.width, size.height] as [HTMLImageElement, number, number, number, number];
+    // }
+    const args = (() => {
+      if (size && start2 && size2) {
+        return [img, start.x, start.y, size.width, size.height, start2.x, start.y, size2.width, size2.height] as [
+          HTMLImageElement,
+          number,
+          number,
+          number,
+          number,
+          number,
+          number,
+          number,
+          number
+        ];
+      }
+      if (size) {
+        return [img, start.x, start.y, size.width, size.height] as [HTMLImageElement, number, number, number, number];
+      }
+      return [img, start.x, start.y] as [HTMLImageElement, number, number];
+    })();
+    // @ts-ignore
+    ctx.drawImage(...args);
+  };
   layer.drawLabel = (point: Point) => {
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
     const x = point.x;
     const y = point.y;
-    ctx.fillText(`${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
+    // ctx.fillText(`${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
   };
   layer.drawPoints = (points: Point[]) => {
     console.log("layer.drawPoints", points.length);
@@ -125,7 +161,7 @@ export function connectLayer(
       ctx.font = "10px Arial";
       const x = p.x;
       const y = p.y;
-      ctx.fillText(`(${i})、${x},${y}`, x + 2, y - 2);
+      // ctx.fillText(`(${i})、${x},${y}`, x + 2, y - 2);
     });
   };
   layer.drawDiamondAtLineEnd = (p1: Point, p2: Point) => {
@@ -158,19 +194,18 @@ export function connectLayer(
     ctx.fill();
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
-    const x = diamondBottomX;
-    const y = diamondBottomY;
-    ctx.fillText(`${p2.x},${p2.y}`, p2.x + 2, p2.y - 2);
+    // const x = diamondBottomX;
+    // const y = diamondBottomY;
+    // ctx.fillText(`${p2.x},${p2.y}`, p2.x + 2, p2.y - 2);
   };
   layer.drawGrid = (finish: Function) => {
     const { width, height } = canvas.size;
     const grid = canvas.grid;
-    const unit = grid.unit;
     const start = {
       x: width / 2 - grid.width / 2,
       y: height / 2 - grid.height / 2,
     };
-    // console.log("draw grid", width, height, start, grid.height);
+    // console.log("[DOMAIN]canvas/connect.web - drawGrid", width, height, grid);
     canvas.setGrid(start);
     ctx.save();
     ctx.beginPath();
@@ -182,6 +217,7 @@ export function connectLayer(
     // ctx.lineTo(831.5500069260597, 173.80000376701355);
     // ctx.lineTo(start.x + grid.width, start.y);
     // 绘制垂直线，x 坐标从左往右移动，并绘制一条垂直线
+    const unit = grid.unit;
     for (let x = start.x; x <= start.x + grid.width; x += unit) {
       ctx.moveTo(x, start.y);
       // ctx.lineTo(x, start.y + grid.height / window.devicePixelRatio);
@@ -200,6 +236,73 @@ export function connectLayer(
     if (finish) {
       finish();
     }
+  };
+  layer.drawTransparentBackground = (finish: Function) => {
+    const cellSize = 10;
+    const { width, height } = canvas.size;
+    for (let row = 0; row < height; row += cellSize) {
+      for (let col = 0; col < width; col += cellSize) {
+        ctx.fillStyle = (row / cellSize) % 2 === (col / cellSize) % 2 ? "#f0f0f0" : "#ffffff";
+        ctx.fillRect(col, row, cellSize, cellSize);
+      }
+    }
+    if (finish) {
+      finish();
+    }
+  };
+  layer.drawBackground = (opt: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    colors: { step: number; color: string }[];
+  }) => {
+    const { x, y, width, height, colors } = opt;
+    if (colors.length === 0) {
+      return;
+    }
+    if (colors.length === 1) {
+      const color = colors[0].color;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, width, height);
+      return;
+    }
+    const linearGradient = ctx.createLinearGradient(0, 0, canvas.size.width, canvas.size.height);
+    for (let i = 0; i < colors.length; i += 1) {
+      const { step, color } = colors[i];
+      linearGradient.addColorStop(step, color);
+    }
+    ctx.fillStyle = linearGradient;
+    ctx.fillRect(x, y, width, height);
+  };
+  layer.drawRoundedRect = (opt: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rx: number;
+    ry: number;
+    colors: { step: number; color: string }[];
+  }) => {
+    const { x, y, width, height, rx, ry, colors } = opt;
+    if (colors.length === 0) {
+      return;
+    }
+    if (colors.length === 1) {
+      const color = colors[0].color;
+      drawFigmaSmoothCorners(ctx, { width, height }, 80, 80, x, y, true, true, true, true, true);
+      ctx.fillStyle = color;
+      ctx.fill();
+      return;
+    }
+    const linearGradient = ctx.createLinearGradient(0, 0, canvas.size.width, canvas.size.height);
+    for (let i = 0; i < colors.length; i += 1) {
+      const { step, color } = colors[i];
+      linearGradient.addColorStop(step, color);
+    }
+    drawFigmaSmoothCorners(ctx, { width, height }, 80, 80, x, y);
+    ctx.fillStyle = linearGradient;
+    ctx.fill();
   };
   layer.clear = () => {
     const { width, height } = $canvas;
@@ -277,6 +380,40 @@ export function connectLayer(
   };
   layer.restore = () => {
     ctx.restore();
+  };
+  const existingGradients: Record<string, any> = {};
+  layer.getGradient = (payload: LinearGradientPayload) => {
+    const { id, x1, y1, x2, y2, stops } = payload;
+    if (existingGradients[id]) {
+      return existingGradients[id];
+    }
+    const {
+      size: { width, height },
+    } = canvas;
+    const gradient = ctx.createLinearGradient(x1 * width, y1 * height, x2 * width, y2 * height);
+    for (let i = 0; i < stops.length; i += 1) {
+      const config = stops[i];
+      gradient.addColorStop(config.offset, config.color);
+    }
+    existingGradients[id] = gradient;
+    return existingGradients[id];
+  };
+  layer.getCanvas = () => {
+    return $canvas;
+  };
+  layer.getBlob = (type: string, quality?: string) => {
+    return new Promise((resolve) => {
+      $canvas.toBlob(
+        (data) => {
+          if (data === null) {
+            return resolve(Result.Err("获取失败，内容为空"));
+          }
+          return resolve(Result.Ok(data));
+        },
+        type,
+        quality
+      );
+    });
   };
 
   $canvas.width = canvas.size.width;

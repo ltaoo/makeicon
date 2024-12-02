@@ -3,17 +3,28 @@
  * @todo 支持 垫底图 来描图标，手动对一些使用弧线的图标进行转化
  */
 import { createSignal, For, onMount, Show } from "solid-js";
-import { Copy } from "lucide-solid";
+import { Copy, Image, PiIcon, Plus, Sofa, SofaIcon, Text, TvIcon } from "lucide-solid";
 import opentype from "opentype.js";
+import { optimize } from "svgo";
+import { saveAs } from "file-saver";
+import { Icon, addIcon, addCollection, disableCache } from "@iconify-icon/solid";
+import calendarIcon from "@iconify-icons/line-md/calendar";
+import accountIcon from "@iconify-icons/line-md/account";
+import alertIcon from "@iconify-icons/line-md/alert";
 
 import { ViewComponent, ViewComponentProps } from "@/store/types";
-import { Dialog, Input, Textarea } from "@/components/ui";
-import { DialogCore, InputCore } from "@/domains/ui";
+import { Button, Dialog, Input, Textarea } from "@/components/ui";
+import { ButtonCore, DialogCore, InputCore } from "@/domains/ui";
 import { connect, connectLayer } from "@/biz/canvas/connect.web";
 import { Canvas } from "@/biz/canvas";
 import { ColorInput } from "@/components/ColorInput";
+import { Result } from "@/domains/result";
 import { ColorInputCore } from "@/biz/color_input";
 import { base, Handler } from "@/domains/base";
+import { blobToArrayBuffer, loadImage, readFileAsArrayBuffer } from "@/utils/browser";
+import { DragZoneCore } from "@/domains/ui/drag-zone";
+import { DropArea } from "@/components/ui/drop-zone";
+import { render } from "solid-js/web";
 
 function HomeIndexPageCore(props: ViewComponentProps) {
   const { app } = props;
@@ -29,7 +40,6 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       });
       return;
     }
-    // setIcons(result);
     _icons = result;
     bus.emit(Events.Change, { ...state });
   }
@@ -91,7 +101,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
           // ctx.restore();
         }
         // 绘制路径
-        // console.log("[PAGE]home/index render $$canvas.paths");
+        // console.log("[PAGE]home/index render $$canvas.paths", $$path.paths);
         for (let j = 0; j < $$path.paths.length; j += 1) {
           const $sub_path = $$path.paths[j];
           const commands = $sub_path.buildCommands();
@@ -144,11 +154,20 @@ function HomeIndexPageCore(props: ViewComponentProps) {
           $pen_layer.setStrokeStyle("lightgrey");
           $pen_layer.setLineWidth(1);
           $pen_layer.stroke();
+          console.log("there has fill?", state.fill, state.stroke);
           if (state.fill.enabled && $sub_path.closed) {
             if ($sub_path.composite === "destination-out") {
               $graph_layer.setGlobalCompositeOperation($sub_path.composite);
             }
             $graph_layer.setFillStyle(state.fill.color);
+            if (state.fill.color.match(/url\(([^)]{1,})\)/)) {
+              const [_, id] = state.fill.color.match(/url\(#([^)]{1,})\)/)!;
+              const payload = $$canvas.getGradient(id);
+              if (payload) {
+                const gradient = $graph_layer.getGradient(payload) as CanvasGradient;
+                $graph_layer.setFillStyle(gradient);
+              }
+            }
             $graph_layer.fill();
           }
           if (state.stroke.enabled) {
@@ -209,6 +228,37 @@ function HomeIndexPageCore(props: ViewComponentProps) {
     }
   }
 
+  async function handleFile(file: File) {
+    const filename = file.name;
+    const r = await readFileAsArrayBuffer(file);
+    if (r.error) {
+      app.tip({
+        text: [r.error.message],
+      });
+      return;
+    }
+    if (filename.match(/\.svg$/)) {
+      const decoder = new TextDecoder("utf-8");
+      const content = decoder.decode(r.data);
+      const result = optimize(content, {
+        multipass: false,
+        plugins: [
+          "removeXMLProcInst",
+          "removeDoctype",
+          "removeXMLNS",
+          "removeXlink",
+          "removeComments",
+          "removeDimensions",
+        ],
+      });
+      $input.setValue(result.data);
+      bus.emit(Events.Change, { ...state });
+      return;
+    }
+    app.tip({
+      text: ["不支持的文件格式"],
+    });
+  }
   const $upload = new InputCore({
     defaultValue: {} as File[],
     type: "file",
@@ -217,7 +267,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       const font = opentype.parse(buffer);
       const r = font.getPath("MakeIcon", 0, 0, 200);
       const { paths } = $$canvas.buildBezierPathsFromOpentype(r.commands);
-      // $$canvas.appendObject(paths);
+      $$canvas.appendObject(paths);
       preview();
     },
   });
@@ -238,8 +288,10 @@ function HomeIndexPageCore(props: ViewComponentProps) {
         });
         return;
       }
-      const { dimensions, paths } = result;
-      // $$canvas.appendObject(paths, { transform: true, dimensions });
+      const { dimensions, gradients, paths } = result;
+      $$canvas.saveGradients(gradients);
+      $$canvas.appendObject(paths, { transform: true, dimensions });
+      draw();
       preview();
       $dialog.hide();
     },
@@ -264,6 +316,59 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       draw();
     },
   });
+  const $drop = new DragZoneCore();
+  const $svg = new InputCore({
+    defaultValue: "",
+  });
+  const $downloadSVG = new ButtonCore({
+    onClick() {
+      const svg = $$canvas.buildSVG();
+      if (svg === null) {
+        app.tip({
+          text: ["创建 SVG 失败"],
+        });
+        return;
+      }
+      console.log(svg);
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      saveAs(blob, "icon.svg");
+    },
+  });
+  const $downloadPNG = new ButtonCore({
+    async onClick() {
+      const $graph = $$canvas.layers.graph;
+      const $background = $$canvas.layers.background;
+      const $canvas = document.createElement("canvas");
+      $canvas.width = $$canvas.grid.width;
+      $canvas.height = $$canvas.grid.height;
+      const ctx = $canvas.getContext("2d")!;
+      ctx.drawImage(
+        $background.getCanvas() as HTMLCanvasElement,
+        $$canvas.grid.x,
+        $$canvas.grid.y,
+        $$canvas.grid.width,
+        $$canvas.grid.height,
+        0,
+        0,
+        $canvas.width,
+        $canvas.height
+      );
+      ctx.drawImage(
+        $graph.getCanvas() as HTMLCanvasElement,
+        $$canvas.grid.x,
+        $$canvas.grid.y,
+        $$canvas.grid.width,
+        $$canvas.grid.height,
+        0,
+        0,
+        $canvas.width,
+        $canvas.height
+      );
+      $canvas.toBlob((blob) => {
+        saveAs(blob as Blob, "icon.png");
+      });
+    },
+  });
   $$canvas.$selection.onChange((state) => {
     const $layer = $$canvas.layers.range;
     // console.log("[PAGE]before drawRect", state);
@@ -272,6 +377,10 @@ function HomeIndexPageCore(props: ViewComponentProps) {
   });
   $$canvas.onRefresh(() => {
     draw();
+  });
+  $drop.onChange(async (files) => {
+    const file = files[0];
+    handleFile(file);
   });
   app.onKeyup(({ code }) => {
     if (code === "Backspace") {
@@ -310,10 +419,14 @@ function HomeIndexPageCore(props: ViewComponentProps) {
     ui: {
       $$canvas,
       $input,
+      $drop,
       $color,
       $dialog,
       $codeDialog,
       $upload,
+      $svg,
+      $downloadSVG,
+      $downloadPNG,
     },
     preview,
     previewWeappCode() {
@@ -344,21 +457,55 @@ export const HomeIndexPage: ViewComponent = (props) => {
   const [state, setState] = createSignal($$canvas.state);
   const [page, setPage] = createSignal($page.state);
   const [layers, setLayers] = createSignal($$canvas.layerList);
+  const [icons, setIcons] = createSignal([<TvIcon class="w-full h-full" />, <SofaIcon class="w-full h-full" />]);
+
+  // Disable cache
+  disableCache("all");
+
+  // Add few custom icons
+  addIcon("demo", calendarIcon);
+  addIcon("experiment2", {
+    width: 16,
+    height: 16,
+    body: '<g fill="none" stroke-linecap="round" stroke-width="1" stroke="currentColor"><circle cx="8" cy="8" r="7.5" stroke-dasharray="48" stroke-dashoffset="48"><animate id="circle" attributeName="stroke-dashoffset" values="48;0" dur="0.5s" fill="freeze" /></circle><path d="M8 5v3" stroke-width="2" stroke-dasharray="5" stroke-dashoffset="5"><animate attributeName="stroke-dashoffset" values="5;0" dur="0.3s" begin="circle.end+0.1s" fill="freeze" /></path></g><circle cx="8" cy="11" r="1" fill="currentColor" opacity="0"><animate attributeName="opacity" values="0;1" dur="0.2s" begin="circle.end+0.5s" fill="freeze" /></circle>',
+  });
+
+  // Add mdi-light icons with custom prefix
+  addCollection({
+    prefix: "test",
+    icons: {
+      alert1: {
+        body: '<path d="M10.5 14c4.142 0 7.5 1.567 7.5 3.5V20H3v-2.5c0-1.933 3.358-3.5 7.5-3.5zm6.5 3.5c0-1.38-2.91-2.5-6.5-2.5S4 16.12 4 17.5V19h13v-1.5zM10.5 5a3.5 3.5 0 1 1 0 7a3.5 3.5 0 0 1 0-7zm0 1a2.5 2.5 0 1 0 0 5a2.5 2.5 0 0 0 0-5zM20 16v-1h1v1h-1zm0-3V7h1v6h-1z" fill="currentColor"/>',
+      },
+      link1: {
+        body: '<path d="M8 13v-1h7v1H8zm7.5-6a5.5 5.5 0 1 1 0 11H13v-1h2.5a4.5 4.5 0 1 0 0-9H13V7h2.5zm-8 11a5.5 5.5 0 1 1 0-11H10v1H7.5a4.5 4.5 0 1 0 0 9H10v1H7.5z" fill="currentColor"/>',
+      },
+    },
+    width: 24,
+    height: 24,
+  });
 
   $$canvas.onChange((v) => setState(v));
   $page.onChange((v) => setPage(v));
 
   const cursorClassName = () => `cursor__${state().cursor}`;
 
+  onMount(() => {});
+
   return (
     <>
       <div
         classList={{
-          "__a relative w-full h-full": true,
+          "__a relative w-full h-full bg-[#f8f9fa]": true,
           [cursorClassName()]: true,
         }}
         onAnimationEnd={(event) => {
-          connect($$canvas, event.currentTarget);
+          const $rect = event.currentTarget;
+          connect($$canvas, $rect);
+          $$canvas.setSize({
+            width: $rect.clientWidth,
+            height: $rect.clientHeight,
+          });
         }}
       >
         <For each={layers()}>
@@ -383,8 +530,118 @@ export const HomeIndexPage: ViewComponent = (props) => {
           }}
         </For>
       </div>
-      <div class="absolute left-0 top-0 w-full" style={{ "z-index": 9999 }}>
-        <div class="flex items-center p-4 space-x-2">
+      <div class="fixed left-[24px] top-[128px]" style={{ "z-index": 9999 }}>
+        <div class="p-4 space-y-8">
+          <div class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl">
+            <div class="">
+              <PiIcon />
+            </div>
+            <div class="mt-2 text-sm">图标</div>
+          </div>
+          <div class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl">
+            <div class="">
+              <Text />
+            </div>
+            <div class="mt-2 text-sm">文字</div>
+          </div>
+          <div class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl">
+            <div class="">
+              <Image />
+            </div>
+            <div class="mt-2 text-sm">背景</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel__icon fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto" style={{ "z-index": 9999 }}>
+        <div class="h-full p-4 w-[360px] bg-white border rounded-md">
+          <section class="icon-24">
+            <h1>Usage (full module)</h1>
+            <div>
+              Icons referenced by name (as SVG, as SPAN):
+              <Icon icon="mdi:home" />
+              <Icon icon="mdi:home" mode="style" />
+            </div>
+            <div class="alert">
+              <Icon icon="mdi-light:alert" />
+              Important notice with alert icon!
+            </div>
+          </section>
+          <section class="icon-24">
+            <h1>Usage (offline mode: using preloaded icons)</h1>
+            <div>
+              Icons referenced by name (as SVG, as SPAN): <Icon icon="demo" />
+              <Icon icon="demo" mode="style" />
+            </div>
+            <div>
+              Icons referenced by object (as SVG, as SPAN): <Icon icon={accountIcon} />
+              <Icon icon={accountIcon} mode="style" />
+            </div>
+            <div>
+              2 icons imported from icon set: <Icon icon="test:alert1" />
+              <Icon icon="test:link1" mode="style" />
+            </div>
+            <div class="alert">
+              <Icon icon={alertIcon} mode="mask" />
+              Important notice with alert icon!
+            </div>
+          </section>
+          <section class="inline-demo">
+            <h1>Inline demo</h1>
+            <div>
+              Block icon (behaving like image):
+              <Icon icon="experiment2" />
+              <Icon icon="experiment2" inline={true} style="vertical-align: 0" />
+            </div>
+            <div>
+              Inline icon (behaving line text / icon font):
+              <Icon icon="experiment2" inline={true} />
+              <Icon icon="experiment2" style={{ "vertical-align": "-0.125em" }} />
+            </div>
+          </section>
+        </div>
+      </div>
+      <div
+        class="panel__background fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto"
+        style={{ "z-index": 9999 }}
+      >
+        <div class="h-full p-4 w-[360px] bg-white border rounded-md"></div>
+      </div>
+      <div class="fixed right-[48px] top-[24px] bottom-[24px] overflow-y-auto" style={{ "z-index": 9999 }}>
+        <div class="h-full border rounded-xl rounded-xl bg-white">
+          <div>
+            <div class="flex justify-between mt-4 px-4">
+              <div>填充</div>
+              <div class="p-2 rounded-sm cursor-pointer hover:bg-gray-200">
+                <Plus class="w-4 h-4" />
+              </div>
+            </div>
+            <div class="px-4">
+              <ColorInput store={$page.ui.$color} />
+            </div>
+          </div>
+          <div class="w-full h-[1px] my-4 bg-gray-200"></div>
+          <div>
+            <div class="flex justify-between px-4">
+              <div>描边</div>
+              <div class="p-2 rounded-sm cursor-pointer hover:bg-gray-200">
+                <Plus class="w-4 h-4" />
+              </div>
+            </div>
+            <div class="px-4">
+              <ColorInput store={$page.ui.$color} />
+            </div>
+          </div>
+          <div class="w-full h-[1px] my-4 bg-gray-200"></div>
+          <div class="px-4">
+            <div class="mt-2 space-x-2">
+              <Button store={$page.ui.$downloadSVG}>下载SVG</Button>
+              <Button store={$page.ui.$downloadPNG}>下载PNG</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="absolute left-1/2 top-0 -translate-x-1/2" style={{ "z-index": 9999 }}>
+        <div class="flex items-center p-4 space-x-2 rounded-md bg-white">
           <Show
             when={["path_editing.select", "path_editing.pen"].includes(state().mode)}
             fallback={
@@ -433,21 +690,6 @@ export const HomeIndexPage: ViewComponent = (props) => {
               完成
             </div>
           </Show>
-          {/* <div
-              class="inline-block px-4 border text-sm bg-white cursor-pointer"
-              onClick={() => {
-                const content = $$canvas.buildSVG();
-                if (!content) {
-                  app.tip({
-                    text: ["没有内容"],
-                  });
-                  return;
-                }
-                app.copy(content);
-              }}
-            >
-              导出SVG
-            </div> */}
           <div
             class="inline-block px-4 border text-sm bg-white cursor-pointer"
             onClick={() => {
@@ -456,57 +698,6 @@ export const HomeIndexPage: ViewComponent = (props) => {
           >
             导入SVG
           </div>
-          <div
-            class="inline-block px-4 border text-sm bg-white cursor-pointer"
-            onClick={() => {
-              $page.preview();
-            }}
-          >
-            预览
-          </div>
-          <div
-            class="inline-block px-4 border text-sm bg-white cursor-pointer"
-            onClick={() => {
-              $page.previewWeappCode();
-            }}
-          >
-            小程序代码
-          </div>
-          <div>
-            <Input store={$page.ui.$upload} />
-          </div>
-          {/* <div
-              class="inline-block px-4 border text-sm bg-white cursor-pointer"
-              onClick={() => {
-                $$canvas.update();
-              }}
-            >
-              刷新
-            </div> */}
-          {/* <div
-              class="inline-block px-4 border text-sm bg-white cursor-pointer"
-              onClick={() => {
-                $$canvas.setDebug();
-              }}
-            >
-              debug
-            </div> */}
-          {/* <div
-              class="inline-block px-4 border text-sm bg-white cursor-pointer"
-              onClick={() => {
-                $$canvas.cancelCursor();
-              }}
-            >
-              隐藏控制点
-            </div> */}
-          {/* <div
-              class="inline-block px-4 border text-sm bg-white cursor-pointer"
-              onClick={() => {
-                $$canvas.log();
-              }}
-            >
-              打印日志
-            </div> */}
         </div>
       </div>
       <div class="absolute left-1/2 bottom-0 -translate-x-1/2" style={{ "z-index": 9999 }}>
@@ -528,14 +719,14 @@ export const HomeIndexPage: ViewComponent = (props) => {
           </div>
         </div>
       </div>
-      <div class="absolute right-0 top-1/2 p-4" style={{ "z-index": 9999 }}>
-        <div>
-          <ColorInput store={$page.ui.$color} />
-        </div>
-      </div>
       <Dialog store={$page.ui.$dialog}>
         <div class="w-[520px]">
           <Textarea store={$page.ui.$input} />
+          <div class="relative mt-4">
+            <div class="w-full h-[120px]">
+              <DropArea store={$page.ui.$drop}></DropArea>
+            </div>
+          </div>
         </div>
       </Dialog>
       <Dialog store={$page.ui.$codeDialog}>
