@@ -2,6 +2,7 @@ import { base, Handler } from "@/domains/base";
 import { Point } from "@/biz/point";
 import { LinearGradientPayload } from "@/biz/svg/path-parser";
 import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
+import { LinePath } from "@/biz/path";
 import { Result } from "@/domains/result";
 
 import { uuidFactory } from "./utils";
@@ -68,7 +69,16 @@ export function CanvasLayer(props: CanvasLayerProps) {
     drawGrid(callback: Function) {
       console.log("请实现 drawGrid 方法");
     },
-    drawTransparentBackground(callback?: Function) {
+    drawTransparentBackground(
+      opt: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        unit: number;
+      },
+      callback?: Function
+    ) {
       console.log("请实现 drawTransparentBackground 方法");
     },
     drawBackground(opt: {
@@ -88,8 +98,19 @@ export function CanvasLayer(props: CanvasLayerProps) {
       rx: number;
       ry: number;
       colors: { step: number; color: string }[];
-    }) {
+    }): LinePath {
       console.log("请实现 drawRoundedRect 方法");
+      return LinePath({ points: [] });
+    },
+    drawArcPie(opt: {
+      x: number;
+      y: number;
+      radius: number;
+      start: { x: number; y: number };
+      arc1: number;
+      arc2: number;
+    }) {
+      console.log("请实现 drawArcPie 方法");
     },
     clear() {
       console.log("请实现 clear 方法");

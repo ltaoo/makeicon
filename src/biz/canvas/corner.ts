@@ -1,9 +1,14 @@
+import { Line } from "@/biz/line";
+import { LinePath } from "@/biz/path";
+import { BezierPoint, CircleCurved } from "@/biz/bezier_point";
+import { Point, PointType } from "@/biz/point";
+
 interface Size {
   width: number;
   height: number;
 }
 
-interface Point {
+interface HerePoint {
   x: number;
   y: number;
 }
@@ -22,7 +27,7 @@ interface CornerConfig {
  * @param b 半短轴
  * @param n 光滑度参数（n ≥ 2）
  */
-function superellipsePoint(t: number, a: number, b: number, n: number): Point {
+function superellipsePoint(t: number, a: number, b: number, n: number): HerePoint {
   const cosT = Math.cos(t);
   const sinT = Math.sin(t);
   const signCosT = Math.sign(cosT);
@@ -40,7 +45,7 @@ function superellipsePoint(t: number, a: number, b: number, n: number): Point {
  * @param end 结束点
  * @param smoothness 光滑度 (0-1)
  */
-function calculateControlPoints(start: Point, end: Point, smoothness: number): [Point, Point] {
+function calculateControlPoints(start: HerePoint, end: HerePoint, smoothness: number): [HerePoint, HerePoint] {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
@@ -98,7 +103,7 @@ export function drawSmoothCorners(
   if (!corners.topRight) {
     ctx.lineTo(posX + size.width, posY);
   } else {
-    const cornerPoints: Point[] = [];
+    const cornerPoints: HerePoint[] = [];
     for (let i = 0; i <= Math.PI / 2; i += Math.PI / 8) {
       const point = superellipsePoint(i, radius, radius, n);
       cornerPoints.push({
@@ -118,7 +123,7 @@ export function drawSmoothCorners(
   if (!corners.bottomRight) {
     ctx.lineTo(posX + size.width, posY + size.height);
   } else {
-    const cornerPoints: Point[] = [];
+    const cornerPoints: HerePoint[] = [];
     for (let i = 0; i <= Math.PI / 2; i += Math.PI / 8) {
       const point = superellipsePoint(i + Math.PI / 2, radius, radius, n);
       cornerPoints.push({
@@ -138,7 +143,7 @@ export function drawSmoothCorners(
   if (!corners.bottomLeft) {
     ctx.lineTo(posX, posY + size.height);
   } else {
-    const cornerPoints: Point[] = [];
+    const cornerPoints: HerePoint[] = [];
     for (let i = 0; i <= Math.PI / 2; i += Math.PI / 8) {
       const point = superellipsePoint(i + Math.PI, radius, radius, n);
       cornerPoints.push({
@@ -158,7 +163,7 @@ export function drawSmoothCorners(
   if (!corners.topLeft) {
     ctx.lineTo(posX, posY);
   } else {
-    const cornerPoints: Point[] = [];
+    const cornerPoints: HerePoint[] = [];
     for (let i = 0; i <= Math.PI / 2; i += Math.PI / 8) {
       const point = superellipsePoint(i + (3 * Math.PI) / 2, radius, radius, n);
       cornerPoints.push({
@@ -199,10 +204,8 @@ export function drawSmoothCorners(
  * @param tr 是否绘制右上角
  * @param bl 是否绘制左下角
  * @param br 是否绘制右下角
- * @param isFill 是否填充
  */
 export function drawFigmaSmoothCorners(
-  ctx: CanvasRenderingContext2D,
   size: Size,
   radius: number,
   smoothness: number,
@@ -211,13 +214,8 @@ export function drawFigmaSmoothCorners(
   tl: boolean = true,
   tr: boolean = true,
   bl: boolean = true,
-  br: boolean = true,
-  isFill: boolean = false
-): void {
-  // 调整位置到左上角
-  //   posX -= size.width / 2;
-  //   posY -= size.height / 2;
-
+  br: boolean = true
+) {
   const ANGLE_TO_RADIANS = Math.PI / 180;
   const shortest_l = Math.min(size.width, size.height);
   const smoothnessRatio = smoothness / 100;
@@ -245,118 +243,403 @@ export function drawFigmaSmoothCorners(
   const b = (p - l - (1 + d_div_c) * c) / 3;
   const a = 2 * b;
 
-  // 开始绘制路径
-  ctx.beginPath();
-  ctx.moveTo(posX + size.width / 2, posY);
-
+  const line = Line({ fill: null });
+  const path = LinePath({ points: [] });
+  line.append(path);
+  // ctx.beginPath();
+  const x = posX + size.width / 2;
+  const y = posY;
+  // ctx.moveTo(x, y);
+  // console.log("1 起始点", { x, y });
+  path.appendPoint(
+    BezierPoint({
+      start: true,
+      point: Point({ type: PointType.Anchor, x, y }),
+      from: null,
+      to: null,
+    })
+  );
   // 绘制右上角
   if (!tr) {
-    ctx.lineTo(posX + size.width, posY);
+    // ctx.lineTo(posX + size.width, posY);
   } else {
-    ctx.lineTo(posX + Math.max(size.width / 2, size.width - p), posY);
-    ctx.bezierCurveTo(
-      posX + size.width - (p - a),
-      posY,
-      posX + size.width - (p - a - b),
-      posY,
-      posX + size.width - (p - a - b - c),
-      posY + d
+    const x1 = posX + Math.max(size.width / 2, size.width - p);
+    const y1 = posY;
+    // ctx.lineTo(x1, y1);
+    const cx1 = posX + size.width - (p - a);
+    const cy1 = posY;
+    const cx2 = posX + size.width - (p - a - b);
+    const cy2 = posY;
+    const x2 = posX + size.width - (p - a - b - c);
+    const y2 = posY + d;
+    // ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+    path.appendPoint(
+      BezierPoint({
+        point: Point({ type: PointType.Anchor, x: x1, y: y1 }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx1, y: cy1 }),
+      })
     );
-    ctx.arc(
-      posX + size.width - radius,
-      posY + radius,
-      radius,
-      (270 + angle_theta) * ANGLE_TO_RADIANS,
-      (360 - angle_theta) * ANGLE_TO_RADIANS,
-      false
+    path.appendPoint(
+      BezierPoint({
+        point: Point({ type: PointType.Anchor, x: x2, y: y2 }),
+        from: Point({ type: PointType.Control, x: cx2, y: cy2 }),
+        to: null,
+      })
     );
-    ctx.bezierCurveTo(
-      posX + size.width,
-      posY + (p - a - b),
-      posX + size.width,
-      posY + (p - a),
-      posX + size.width,
-      posY + Math.min(size.height / 2, p)
+    const center = {
+      x: posX + size.width - radius,
+      y: posY + radius,
+    };
+    const arc = {
+      start: (270 + angle_theta) * ANGLE_TO_RADIANS,
+      end: (360 - angle_theta) * ANGLE_TO_RADIANS,
+    };
+    const arcPoints = {
+      start: {
+        x: center.x + radius * Math.cos(arc.start),
+        y: center.y + radius * Math.sin(arc.start),
+      },
+      end: {
+        x: center.x + radius * Math.cos(arc.end),
+        y: center.y + radius * Math.sin(arc.end),
+      },
+    };
+    // ctx.arc(center.x, center.y, radius, arc.start, arc.end, false);
+    path.appendPoint(
+      BezierPoint({
+        circle: {
+          center,
+          radius,
+          arc,
+          counterclockwise: false,
+          extra: {
+            start: arcPoints.start,
+            rx: radius,
+            ry: radius,
+            rotate: 0,
+            t1: 0,
+            t2: 1,
+            end: arcPoints.end,
+          },
+        } as CircleCurved,
+        point: Point({ type: PointType.Anchor, x: 0, y: 0 }),
+        from: null,
+        to: null,
+      })
+    );
+    const cx3 = posX + size.width;
+    const cy3 = posY + (p - a - b);
+    const cx4 = posX + size.width;
+    const cy4 = posY + (p - a);
+    const x4 = posX + size.width;
+    const y4 = posY + Math.min(size.height / 2, p);
+    // ctx.bezierCurveTo(cx3, cy3, cx4, cy4, x4, y4);
+    path.appendPoint(
+      BezierPoint({
+        point: Point({ type: PointType.Anchor, x: arcPoints.end.x, y: arcPoints.end.y }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx3, y: cy3 }),
+      })
+    );
+    path.appendPoint(
+      BezierPoint({
+        point: Point({ type: PointType.Anchor, x: x4, y: y4 }),
+        from: Point({ type: PointType.Control, x: cx4, y: cy4 }),
+        to: null,
+      })
     );
   }
 
   // 绘制右下角
   if (!br) {
-    ctx.lineTo(posX + size.width, posY + size.height);
+    // ctx.lineTo(posX + size.width, posY + size.height);
   } else {
-    ctx.lineTo(posX + size.width, posY + Math.max(size.height / 2, size.height - p));
-    ctx.bezierCurveTo(
-      posX + size.width,
-      posY + size.height - (p - a),
-      posX + size.width,
-      posY + size.height - (p - a - b),
-      posX + size.width - d,
-      posY + size.height - (p - a - b - c)
+    const x1 = posX + size.width;
+    const y1 = posY + Math.max(size.height / 2, size.height - p);
+    // ctx.lineTo(x1, y1);
+    const cx1 = posX + size.width;
+    const cy1 = posY + size.height - (p - a);
+    const cx2 = posX + size.width;
+    const cy2 = posY + size.height - (p - a - b);
+    const x2 = posX + size.width - d;
+    const y2 = posY + size.height - (p - a - b - c);
+    // ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+    path.appendPoint(
+      BezierPoint({
+        point: Point({ type: PointType.Anchor, x: x1, y: y1 }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx1, y: cy1 }),
+      })
     );
-    ctx.arc(
-      posX + size.width - radius,
-      posY + size.height - radius,
-      radius,
-      (0 + angle_theta) * ANGLE_TO_RADIANS,
-      (90 - angle_theta) * ANGLE_TO_RADIANS,
-      false
+    path.appendPoint(
+      BezierPoint({
+        point: Point({ type: PointType.Anchor, x: x2, y: y2 }),
+        from: Point({ type: PointType.Control, x: cx2, y: cy2 }),
+        to: null,
+      })
     );
-    ctx.bezierCurveTo(
-      posX + size.width - (p - a - b),
-      posY + size.height,
-      posX + size.width - (p - a),
-      posY + size.height,
-      posX + Math.max(size.width / 2, size.width - p),
-      posY + size.height
+    const center = {
+      x: posX + size.width - radius,
+      y: posY + size.height - radius,
+    };
+    const arc = {
+      start: (0 + angle_theta) * ANGLE_TO_RADIANS,
+      end: (90 - angle_theta) * ANGLE_TO_RADIANS,
+    };
+    const arcPoints = {
+      start: {
+        x: center.x + radius * Math.cos(arc.start),
+        y: center.y + radius * Math.sin(arc.start),
+      },
+      end: {
+        x: center.x + radius * Math.cos(arc.end),
+        y: center.y + radius * Math.sin(arc.end),
+      },
+    };
+    // ctx.arc(center.x, center.y, radius, arc.start, arc.end, false);
+    path.appendPoint(
+      BezierPoint({
+        circle: {
+          center,
+          radius,
+          arc,
+          counterclockwise: false,
+          extra: {
+            start: arcPoints.start,
+            rx: radius,
+            ry: radius,
+            rotate: 0,
+            t1: 0,
+            t2: 1,
+            end: arcPoints.end,
+          },
+        } as CircleCurved,
+        point: Point({ type: PointType.Anchor, x: 0, y: 0 }),
+        from: null,
+        to: null,
+      })
+    );
+    const cx3 = posX + size.width - (p - a - b);
+    const cy3 = posY + size.height;
+    const cx4 = posX + size.width - (p - a);
+    const cy4 = posY + size.height;
+    const x4 = posX + Math.max(size.width / 2, size.width - p);
+    const y4 = posY + size.height;
+    // ctx.bezierCurveTo(cx3, cy3, cx4, cy4, x4, y4);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: arcPoints.end.x, y: arcPoints.end.y }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx3, y: cy3 }),
+      })
+    );
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: x4, y: y4 }),
+        from: Point({ type: PointType.Control, x: cx4, y: cy4 }),
+        to: null,
+      })
     );
   }
 
   // 绘制左下角
   if (!bl) {
-    ctx.lineTo(posX, posY + size.height);
+    // ctx.lineTo(posX, posY + size.height);
   } else {
-    ctx.lineTo(posX + Math.min(size.width / 2, p), posY + size.height);
-    ctx.bezierCurveTo(
-      posX + (p - a),
-      posY + size.height,
-      posX + (p - a - b),
-      posY + size.height,
-      posX + (p - a - b - c),
-      posY + size.height - d
+    const x1 = posX + Math.min(size.width / 2, p);
+    const y1 = posY + size.height;
+    // ctx.lineTo(x1, y1);
+    const cx1 = posX + (p - a);
+    const cy1 = posY + size.height;
+    const cx2 = posX + (p - a - b);
+    const cy2 = posY + size.height;
+    const x2 = posX + (p - a - b - c);
+    const y2 = posY + size.height - d;
+    // ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: x1, y: y1 }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx1, y: cy1 }),
+      })
     );
-    ctx.arc(
-      posX + radius,
-      posY + size.height - radius,
-      radius,
-      (90 + angle_theta) * ANGLE_TO_RADIANS,
-      (180 - angle_theta) * ANGLE_TO_RADIANS,
-      false
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: x2, y: y2 }),
+        from: Point({ type: PointType.Control, x: cx2, y: cy2 }),
+        to: null,
+      })
     );
-    ctx.bezierCurveTo(
-      posX,
-      posY + size.height - (p - a - b),
-      posX,
-      posY + size.height - (p - a),
-      posX,
-      posY + Math.max(size.height / 2, size.height - p)
+    const center = {
+      x: posX + radius,
+      y: posY + size.height - radius,
+    };
+    const arc = {
+      start: (90 + angle_theta) * ANGLE_TO_RADIANS,
+      end: (180 - angle_theta) * ANGLE_TO_RADIANS,
+    };
+    const arcPoints = {
+      start: {
+        x: center.x + radius * Math.cos(arc.start),
+        y: center.y + radius * Math.sin(arc.start),
+      },
+      end: {
+        x: center.x + radius * Math.cos(arc.end),
+        y: center.y + radius * Math.sin(arc.end),
+      },
+    };
+    // ctx.arc(center.x, center.y, radius, arc.start, arc.end, false);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        circle: {
+          center,
+          radius,
+          arc,
+          counterclockwise: false,
+          extra: {
+            start: arcPoints.start,
+            rx: radius,
+            ry: radius,
+            rotate: 0,
+            t1: 0,
+            t2: 1,
+            end: arcPoints.end,
+          },
+        } as CircleCurved,
+        point: Point({ type: PointType.Anchor, x: 0, y: 0 }),
+        from: null,
+        to: null,
+      })
+    );
+    const cx3 = posX;
+    const cy3 = posY + size.height - (p - a - b);
+    const cx4 = posX;
+    const cy4 = posY + size.height - (p - a);
+    const x4 = posX;
+    const y4 = posY + Math.max(size.height / 2, size.height - p);
+    // ctx.bezierCurveTo(cx3, cy3, cx4, cy4, x4, y4);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: arcPoints.end.x, y: arcPoints.end.y }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx3, y: cy3 }),
+      })
+    );
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: x4, y: y4 }),
+        from: Point({ type: PointType.Control, x: cx4, y: cy4 }),
+        to: null,
+      })
     );
   }
 
   // 绘制左上角
   if (!tl) {
-    ctx.lineTo(posX, posY);
+    // ctx.lineTo(posX, posY);
   } else {
-    ctx.lineTo(posX, posY + Math.min(size.height / 2, p));
-    ctx.bezierCurveTo(posX, posY + (p - a), posX, posY + (p - a - b), posX + d, posY + (p - a - b - c));
-    ctx.arc(
-      posX + radius,
-      posY + radius,
-      radius,
-      (180 + angle_theta) * ANGLE_TO_RADIANS,
-      (270 - angle_theta) * ANGLE_TO_RADIANS,
-      false
+    const x1 = posX;
+    const y1 = posY + Math.min(size.height / 2, p);
+    // ctx.lineTo(x1, y1);
+    const cx1 = posX;
+    const cy1 = posY + (p - a);
+    const cx2 = posX;
+    const cy2 = posY + (p - a - b);
+    const x2 = posX + d;
+    const y2 = posY + (p - a - b - c);
+    // ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: x1, y: y1 }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx1, y: cy1 }),
+      })
     );
-    ctx.bezierCurveTo(posX + (p - a - b), posY, posX + (p - a), posY, posX + Math.min(size.width / 2, p), posY);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: x2, y: y2 }),
+        from: Point({ type: PointType.Control, x: cx2, y: cy2 }),
+        to: null,
+      })
+    );
+    const center = {
+      x: posX + radius,
+      y: posY + radius,
+    };
+    const arc = {
+      start: (180 + angle_theta) * ANGLE_TO_RADIANS,
+      end: (270 - angle_theta) * ANGLE_TO_RADIANS,
+    };
+    const arcPoints = {
+      start: {
+        x: center.x + radius * Math.cos(arc.start),
+        y: center.y + radius * Math.sin(arc.start),
+      },
+      end: {
+        x: center.x + radius * Math.cos(arc.end),
+        y: center.y + radius * Math.sin(arc.end),
+      },
+    };
+    // ctx.arc(center.x, center.y, radius, arc.start, arc.end, false);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        circle: {
+          center,
+          radius,
+          arc,
+          counterclockwise: false,
+          extra: {
+            start: arcPoints.start,
+            rx: radius,
+            ry: radius,
+            rotate: 0,
+            t1: 0,
+            t2: 1,
+            end: arcPoints.end,
+          },
+        } as CircleCurved,
+        point: Point({ type: PointType.Anchor, x: 0, y: 0 }),
+        from: null,
+        to: null,
+      })
+    );
+    const cx3 = posX + (p - a - b);
+    const cy3 = posY;
+    const cx4 = posX + (p - a);
+    const cy4 = posY;
+    const x4 = posX + Math.min(size.width / 2, p);
+    const y4 = posY;
+    // ctx.bezierCurveTo(cx3, cy3, cx4, cy4, x4, y4);
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: arcPoints.end.x, y: arcPoints.end.y }),
+        from: null,
+        to: Point({ type: PointType.Control, x: cx3, y: cy3 }),
+      })
+    );
+    path.appendPoint(
+      BezierPoint({
+        start: false,
+        point: Point({ type: PointType.Anchor, x: x4, y: y4 }),
+        from: Point({ type: PointType.Control, x: cx4, y: cy4 }),
+        to: null,
+        end: true,
+      })
+    );
+    path.setClosed();
   }
-  ctx.closePath();
+  // ctx.closePath();
+  return path;
 }

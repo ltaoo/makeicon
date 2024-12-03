@@ -16,8 +16,10 @@ import { LineCapType, LineJoinType, PathCompositeOperation } from "@/biz/line";
 import { Point } from "@/biz/point";
 import { Line } from "@/biz/line";
 import { objectToHTML } from "@/utils";
-import { buildPath, opentypeCommandsToTokens } from "./utils";
 import { PathParser } from "@/biz/svg/path-parser";
+
+import { buildPath, opentypeCommandsToTokens } from "./utils";
+import { CanvasLayer } from "./layer";
 
 let debug = false;
 
@@ -150,15 +152,9 @@ export function CanvasConverter(props: {
                 return;
               }
               if (c === "A" && a2) {
-                const end = [a2[5], a2[6]];
-                const rrr = [
-                  a2[0],
-                  a2[1],
-                  a2[2],
-                  a2[3],
-                  a2[4],
-                  ...this.transformPos2({ x: end[0], y: end[1] }, { scale }),
-                ].join(" ");
+                const [x, y, xr, yr, rotate, laf, sf, x1, y1] = a2;
+                const rrr = [xr, yr, rotate, laf, sf, ...this.transformPos2({ x: x1, y: y1 }, { scale })].join(" ");
+                console.log("build SVG of A", a2, rrr);
                 d += `A${rrr}`;
                 return;
               }
@@ -190,8 +186,15 @@ export function CanvasConverter(props: {
     },
     buildSVGJSON(
       lines: Line[],
-      options: Partial<{ cap: LineCapType; join: LineJoinType; width: number; height: number }> = {}
+      options: Partial<{
+        cap: LineCapType;
+        join: LineJoinType;
+        width: number;
+        height: number;
+        background: CanvasLayer;
+      }> = {}
     ) {
+      const { background } = options;
       const scale = 1;
       const box = {
         width: _grid.width * scale,
@@ -202,6 +205,8 @@ export function CanvasConverter(props: {
         height: options.height || box.height,
       };
       const arr = this.buildSVGPaths(lines, { scale });
+      if (background) {
+      }
       // console.log("[BIZ]canvas/index - buildSVGJSON after this.buildSVGPaths", arr);
       if (arr.length === 0) {
         return null;
@@ -278,8 +283,8 @@ export function CanvasConverter(props: {
       return template;
     },
     /** 构建多种尺寸的 icon 用于预览 */
-    buildPreviewIcons(lines: Line[]) {
-      const svg = this.buildSVGJSON(lines);
+    buildPreviewIcons(lines: Line[], opt: { background: CanvasLayer }) {
+      const svg = this.buildSVGJSON(lines, opt);
       if (!svg) {
         return [];
       }

@@ -51,13 +51,6 @@ function HomeIndexPageCore(props: ViewComponentProps) {
     $graph_layer.clear();
     $pen_layer.clear();
     $graph_layer.emptyLogs();
-    // $$layer.resumeLog();
-    // if ($$canvas.debug) {
-    //   const m = $$canvas.getMousePoint();
-    //   $$layer.setFillStyle("black");
-    //   $$layer.setFont("10px Arial");
-    //   $$layer.fillText(m.text, m.x, m.y);
-    // }
     // console.log("[PAGE]before render $$canvas.paths", $$canvas.paths);
     for (let i = 0; i < $$canvas.paths.length; i += 1) {
       (() => {
@@ -65,42 +58,6 @@ function HomeIndexPageCore(props: ViewComponentProps) {
         const $$path = $$canvas.paths[i];
         const state = $$path.state;
         // console.log("before $$path.state.stroke.enabled", state.stroke.enabled);
-        if (state.stroke.enabled) {
-          // 绘制描边
-          // const curves = $$path.buildOutline({ cap: "butt" });
-          // ctx.save();
-          // ctx.beginPath();
-          // for (let i = 0; i < curves.outline.length; i += 1) {
-          //   const curve = curves.outline[i];
-          //   const [start, c1, c2, end] = curve.points;
-          //   const next = curves.outline[i + 1];
-          //   if (i === 0 && start) {
-          //     ctx.moveTo(start.x, start.y);
-          //   }
-          //   (() => {
-          //     if (curve._linear) {
-          //       const last = curve.points[curve.points.length - 1];
-          //       ctx.lineTo(last.x, last.y);
-          //       return;
-          //     }
-          //     if (end) {
-          //       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
-          //       return;
-          //     }
-          //     ctx.quadraticCurveTo(c1.x, c1.y, c2.x, c2.y);
-          //   })();
-          // }
-          // ctx.closePath();
-          // ctx.fillStyle = $$path.state.stroke.color;
-          // ctx.fill();
-          // ctx.strokeStyle = state.stroke.color;
-          // ctx.lineWidth = $$canvas.grid.unit * state.stroke.width;
-          // ctx.lineCap = state.stroke.start_cap;
-          // ctx.lineJoin = state.stroke.join;
-          // ctx.stroke();
-          // ctx.restore();
-        }
-        // 绘制路径
         // console.log("[PAGE]home/index render $$canvas.paths", $$path.paths);
         for (let j = 0; j < $$path.paths.length; j += 1) {
           const $sub_path = $$path.paths[j];
@@ -122,6 +79,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
             if (command.c === "A") {
               // console.log('A', command);
               const [c1x, c1y, radius, angle1, angle2, counterclockwise] = command.a;
+              // console.log("A 弧线", c1x, c1y, radius, angle1, angle2, counterclockwise);
               $graph_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
               $pen_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
               // if (command.end) {
@@ -151,10 +109,6 @@ function HomeIndexPageCore(props: ViewComponentProps) {
               $pen_layer.closePath();
             }
           }
-          $pen_layer.setStrokeStyle("lightgrey");
-          $pen_layer.setLineWidth(1);
-          $pen_layer.stroke();
-          console.log("there has fill?", state.fill, state.stroke);
           if (state.fill.enabled && $sub_path.closed) {
             if ($sub_path.composite === "destination-out") {
               $graph_layer.setGlobalCompositeOperation($sub_path.composite);
@@ -184,6 +138,9 @@ function HomeIndexPageCore(props: ViewComponentProps) {
             if ($$canvas.state.cursor) {
               // const $layer = $$canvas.layers[1];
               $pen_layer.save();
+              $pen_layer.setStrokeStyle("lightgrey");
+              $pen_layer.setLineWidth(1);
+              $pen_layer.stroke();
               for (let k = 0; k < $sub_path.skeleton.length; k += 1) {
                 const point = $sub_path.skeleton[k];
                 // console.log("[PAGE]home/index", i, point.start ? "start" : "", point.from, point.to, point.virtual);
@@ -306,13 +263,22 @@ function HomeIndexPageCore(props: ViewComponentProps) {
   const $input = new InputCore({
     defaultValue: ``,
   });
-  const $color = ColorInputCore({
+  const $fill = ColorInputCore({
     onChange(values) {
-      console.log("color input change", values);
       if (!$$canvas.object) {
         return;
       }
       $$canvas.object.setFill(values);
+      draw();
+    },
+  });
+  const $stroke = ColorInputCore({
+    onChange(values) {
+      console.log("[PAGE]home/index - handle $stroke change", values, $$canvas.object);
+      if (!$$canvas.object) {
+        return;
+      }
+      $$canvas.object.setStroke(values);
       draw();
     },
   });
@@ -371,12 +337,16 @@ function HomeIndexPageCore(props: ViewComponentProps) {
   });
   $$canvas.$selection.onChange((state) => {
     const $layer = $$canvas.layers.range;
-    // console.log("[PAGE]before drawRect", state);
     $layer.clear();
     $layer.drawRect(state);
   });
+  $$canvas.onSelect((line) => {
+    $stroke.setValue(line.stroke);
+    $fill.setValue(line.fill);
+  });
   $$canvas.onRefresh(() => {
     draw();
+    preview();
   });
   $drop.onChange(async (files) => {
     const file = files[0];
@@ -420,7 +390,8 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       $$canvas,
       $input,
       $drop,
-      $color,
+      $fill,
+      $stroke,
       $dialog,
       $codeDialog,
       $upload,
@@ -428,19 +399,8 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       $downloadSVG,
       $downloadPNG,
     },
-    preview,
-    previewWeappCode() {
-      const content = $$canvas.buildWeappCode();
-      if (!content) {
-        app.tip({
-          text: ["没有内容"],
-        });
-        return;
-      }
-      _code = content;
-      $codeDialog.show();
-      bus.emit(Events.Change);
-      // app.copy(content);
+    ready() {
+      preview();
     },
     onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
       return bus.on(Events.Change, handler);
@@ -490,7 +450,9 @@ export const HomeIndexPage: ViewComponent = (props) => {
 
   const cursorClassName = () => `cursor__${state().cursor}`;
 
-  onMount(() => {});
+  onMount(() => {
+    $page.ready();
+  });
 
   return (
     <>
@@ -600,6 +562,9 @@ export const HomeIndexPage: ViewComponent = (props) => {
           </section>
         </div>
       </div>
+      <div class="panel__text fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto" style={{ "z-index": 9999 }}>
+        <div class="h-full p-4 w-[360px] bg-white border rounded-md"></div>
+      </div>
       <div
         class="panel__background fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto"
         style={{ "z-index": 9999 }}
@@ -616,7 +581,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
               </div>
             </div>
             <div class="px-4">
-              <ColorInput store={$page.ui.$color} />
+              <ColorInput store={$page.ui.$fill} />
             </div>
           </div>
           <div class="w-full h-[1px] my-4 bg-gray-200"></div>
@@ -628,7 +593,26 @@ export const HomeIndexPage: ViewComponent = (props) => {
               </div>
             </div>
             <div class="px-4">
-              <ColorInput store={$page.ui.$color} />
+              <ColorInput store={$page.ui.$stroke} />
+            </div>
+          </div>
+          <div class="w-full h-[1px] my-4 bg-gray-200"></div>
+          <div class="px-4">
+            <div>预览</div>
+            <div class="flex space-x-4">
+              <For each={page().icons}>
+                {(svg) => {
+                  return (
+                    <div class="flex flex-col items-center justify-center p-2 border rounded-md">
+                      <div
+                        style={{ width: svg.width, height: svg.height, "background-color": "#f2f2f2" }}
+                        innerHTML={svg.content}
+                      ></div>
+                      <div class="mt-2 text-center">{svg.text}</div>
+                    </div>
+                  );
+                }}
+              </For>
             </div>
           </div>
           <div class="w-full h-[1px] my-4 bg-gray-200"></div>
@@ -701,23 +685,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
         </div>
       </div>
       <div class="absolute left-1/2 bottom-0 -translate-x-1/2" style={{ "z-index": 9999 }}>
-        <div class="p-4">
-          <div class="flex space-x-4">
-            <For each={page().icons}>
-              {(svg) => {
-                return (
-                  <div class="flex flex-col items-center justify-center p-2 border rounded-md">
-                    <div
-                      style={{ width: svg.width, height: svg.height, "background-color": "#f2f2f2" }}
-                      innerHTML={svg.content}
-                    ></div>
-                    <div class="mt-2 text-center">{svg.text}</div>
-                  </div>
-                );
-              }}
-            </For>
-          </div>
-        </div>
+        <div class="p-4"></div>
       </div>
       <Dialog store={$page.ui.$dialog}>
         <div class="w-[520px]">

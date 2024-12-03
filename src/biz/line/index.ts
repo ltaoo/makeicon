@@ -113,17 +113,12 @@ export function Line(props: PathProps) {
       const path = _paths[i];
       path.move({ x: values.dx, y: values.dy });
     }
-    // moveBox({ dx: values.dx, dy: values.dy });
   });
   _$obj.onFinishDrag((pos) => {
     for (let i = 0; i < _paths.length; i += 1) {
       const path = _paths[i];
       path.finishMove(pos);
     }
-    // if (_tmp_box) {
-    //   _box = { ..._tmp_box };
-    //   _tmp_box = null;
-    // }
   });
   _$obj.onCursorChange((v) => bus.emit(Events.CursorChange, v));
 
@@ -142,6 +137,12 @@ export function Line(props: PathProps) {
     setEditing(v: boolean) {
       _editing = v;
     },
+    get stroke() {
+      return _stroke;
+    },
+    get fill() {
+      return _fill;
+    },
     get box() {
       // if (_tmp_box) {
       //   return _tmp_box;
@@ -149,9 +150,19 @@ export function Line(props: PathProps) {
       // return _box;
       return _$obj.client;
     },
+    obj: _$obj,
     setFill(values: { color: string; opacity: number; visible: boolean }) {
       const { color, opacity, visible } = values;
       _fill = {
+        ..._fill,
+        enabled: visible,
+        color: color,
+      };
+    },
+    setStroke(values: { color: string; opacity: number; visible: boolean }) {
+      const { color, opacity, visible } = values;
+      _stroke = {
+        ..._stroke,
         enabled: visible,
         color: color,
       };

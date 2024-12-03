@@ -48,8 +48,11 @@ export function Canvas(props: CanvasProps) {
     background: CanvasLayer({
       zIndex: 0,
       onMounted(layer) {
+        // const $background = _layers.background;
+        const $background = layer;
         const grid = _grid;
-        layer.drawRoundedRect({
+        // const $frame = _layers.frame;
+        const path = $background.drawRoundedRect({
           x: grid.x,
           y: grid.y,
           rx: 60,
@@ -61,23 +64,49 @@ export function Canvas(props: CanvasProps) {
             { step: 1, color: "#9147ff" },
           ],
         });
+        const line = Line({});
+        line.setFill({
+          color: "#cccccc",
+          opacity: 100,
+          visible: true,
+        });
+        line.setStroke({
+          color: "#cccccc",
+          opacity: 100,
+          visible: false,
+        });
+        line.append(path);
+        line.setEditing(false);
+        _lines.push(line);
+        bus.emit(Events.Refresh);
       },
     }),
     frame: CanvasLayer({
       zIndex: 0,
-      onMounted(layer) {
+      async onMounted(layer) {
         const grid = _grid;
-        const { width, height } = _size;
-        const start = {
-          x: width / 2 - grid.width / 2,
-          y: height / 2 - grid.height / 2,
-        };
+        const $background = _layers.background;
+        const $frame = _layers.frame;
+        // layer.drawTransparentBackground({
+        //   x: grid.x,
+        //   y: grid.y,
+        //   width: grid.width,
+        //   height: grid.height,
+        //   unit: 18,
+        // });
         // layer.drawBackground({
         //   x: start.x,
         //   y: start.y,
         //   width: grid.width,
         //   height: grid.height,
         //   colors: [{ step: 0, color: "white" }],
+        // });
+        // $frame.drawTransparentBackground({
+        //   x: grid.x,
+        //   y: grid.y,
+        //   width: grid.width,
+        //   height: grid.height,
+        //   unit: 18,
         // });
       },
     }),
@@ -138,10 +167,14 @@ export function Canvas(props: CanvasProps) {
   enum Events {
     /** 重新绘制 canvas 内容 */
     Refresh,
+    Select,
+    UnSelect,
     Change,
   }
   type TheTypesOfEvents = {
     [Events.Refresh]: void;
+    [Events.Select]: Line;
+    [Events.UnSelect]: Line;
     [Events.Change]: typeof _state;
   };
   // 事件
@@ -165,6 +198,7 @@ export function Canvas(props: CanvasProps) {
     get paths() {
       return _lines;
     },
+    /** 当前选择的图形 */
     get object() {
       return _cur_object;
     },
@@ -341,7 +375,7 @@ export function Canvas(props: CanvasProps) {
       return _$converter.buildSVG(_lines);
     },
     buildPreviewIcons() {
-      return _$converter.buildPreviewIcons(_lines);
+      return _$converter.buildPreviewIcons(_lines, { background: _layers.background });
     },
     update() {
       bus.emit(Events.Refresh);
@@ -373,7 +407,7 @@ export function Canvas(props: CanvasProps) {
           }
           return null;
         })();
-        console.log("[BIZ]canvas/index - before if(clicked", clicked, _cur_object, clicked === _cur_object);
+        // console.log("[BIZ]canvas/index - before if(clicked", clicked, _cur_object, clicked === _cur_object);
         if (clicked) {
           if (_cur_object) {
             if (_cur_object !== clicked) {
@@ -428,6 +462,12 @@ export function Canvas(props: CanvasProps) {
       })();
       _$pointer.handleMouseUp(pos);
     },
+    onSelect(handler: Handler<TheTypesOfEvents[Events.Select]>) {
+      return bus.on(Events.Select, handler);
+    },
+    onUnSelect(handler: Handler<TheTypesOfEvents[Events.UnSelect]>) {
+      return bus.on(Events.UnSelect, handler);
+    },
     onRefresh(handler: Handler<TheTypesOfEvents[Events.Refresh]>) {
       return bus.on(Events.Refresh, handler);
     },
@@ -464,10 +504,12 @@ export function Canvas(props: CanvasProps) {
   });
   _$path_editing.onCreateLine((line) => {
     line.onSelect(() => {
+      bus.emit(Events.Select, line);
       bus.emit(Events.Refresh);
     });
     line.onUnselect(() => {
-      console.log("[BIZ]canvas/index - line.onUnselect");
+      // console.log("[BIZ]canvas/index - line.onUnselect");
+      bus.emit(Events.UnSelect, line);
       bus.emit(Events.Refresh);
     });
     line.onDragging(() => {
@@ -484,6 +526,7 @@ export function Canvas(props: CanvasProps) {
     //   bus.emit(Events.Refresh);
     // });
     _lines.push(line);
+    // _objects.push(line.obj);
   });
   _$path_editing.onCursorChange((v) => {
     if (_cursor === v) {

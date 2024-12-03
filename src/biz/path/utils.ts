@@ -343,17 +343,17 @@ export function buildCommandsFromPathPoints(_path_points: BezierPoint[]) {
           ],
           // 这个是给 SVG 绘制
           a2: [
-            // extra.start.x,
-            // extra.start.y,
+            extra.start.x,
+            extra.start.y,
             extra.rx,
             extra.ry,
             extra.rotate,
             extra.t1,
             extra.t2,
-            cur.point.pos.x,
-            cur.point.pos.y,
+            extra.end.x,
+            extra.end.y,
           ],
-          end: next && next.from ? cur.point.pos : null,
+          end: extra.end,
           start: extra.start,
         });
         return;

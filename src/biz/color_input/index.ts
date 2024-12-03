@@ -1,5 +1,6 @@
 import { base, Handler } from "@/domains/base";
 import { InputCore } from "@/domains/ui";
+import { LineCapType, LineJoinType } from "@/biz/path";
 
 type ColorInputCoreProps = {
   onChange?: (values: { color: string; opacity: number; visible: boolean }) => void;
@@ -57,8 +58,9 @@ export function ColorInputCore(props: ColorInputCoreProps) {
     state: _state,
     $input: $hex,
     $opacity,
-    setValue(v: string) {
-      _value = v;
+    setValue(v: { enabled: boolean; color: string }) {
+      _value = v.color;
+      _visible = v.enabled;
       bus.emit(Events.Change, { ..._state });
     },
     setOpacity(v: number) {

@@ -32,7 +32,15 @@ export type CircleCurved = {
   arc: { start: number; end: number };
   /** 是否逆时针 */
   counterclockwise: boolean;
-  extra: { start: { x: number; y: number }; rx: number; ry: number; rotate: number; t1: number; t2: number };
+  extra: {
+    start: { x: number; y: number };
+    rx: number;
+    ry: number;
+    rotate: number;
+    t1: number;
+    t2: number;
+    end: { x: number; y: number };
+  };
 };
 type BezierPointProps = {
   point: Point;

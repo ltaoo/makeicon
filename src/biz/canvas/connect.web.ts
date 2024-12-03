@@ -92,7 +92,7 @@ export function connectLayer(
     const x = point.x;
     const y = point.y;
     // @ts-ignore
-    // ctx.fillText(`${x},${y}`, x + 2, y - 2);
+    ctx.fillText(`${x},${y}`, x + 2, y - 2);
   };
   layer.drawRect = (
     rect: { x: number; y: number; x1: number; y1: number },
@@ -150,7 +150,7 @@ export function connectLayer(
     ctx.font = "10px Arial";
     const x = point.x;
     const y = point.y;
-    // ctx.fillText(`${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
+    ctx.fillText(`${x - canvas.grid.x},${y - canvas.grid.y}`, x + 2, y - 2);
   };
   layer.drawPoints = (points: Point[]) => {
     console.log("layer.drawPoints", points.length);
@@ -159,8 +159,8 @@ export function connectLayer(
       // 绘制坐标
       ctx.fillStyle = "black";
       ctx.font = "10px Arial";
-      const x = p.x;
-      const y = p.y;
+      // const x = p.x;
+      // const y = p.y;
       // ctx.fillText(`(${i})、${x},${y}`, x + 2, y - 2);
     });
   };
@@ -237,15 +237,26 @@ export function connectLayer(
       finish();
     }
   };
-  layer.drawTransparentBackground = (finish: Function) => {
-    const cellSize = 10;
-    const { width, height } = canvas.size;
+  layer.drawTransparentBackground = (
+    opt: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      unit: number;
+    },
+    finish: Function
+  ) => {
+    const { x, y, width, height, unit = 20 } = opt;
+    const cellSize = unit;
+    layer.save();
     for (let row = 0; row < height; row += cellSize) {
       for (let col = 0; col < width; col += cellSize) {
         ctx.fillStyle = (row / cellSize) % 2 === (col / cellSize) % 2 ? "#f0f0f0" : "#ffffff";
-        ctx.fillRect(col, row, cellSize, cellSize);
+        ctx.fillRect(x + col, y + row, cellSize, cellSize);
       }
     }
+    layer.restore();
     if (finish) {
       finish();
     }
@@ -263,8 +274,10 @@ export function connectLayer(
     }
     if (colors.length === 1) {
       const color = colors[0].color;
+      layer.save();
       ctx.fillStyle = color;
       ctx.fillRect(x, y, width, height);
+      layer.restore();
       return;
     }
     const linearGradient = ctx.createLinearGradient(0, 0, canvas.size.width, canvas.size.height);
@@ -272,8 +285,10 @@ export function connectLayer(
       const { step, color } = colors[i];
       linearGradient.addColorStop(step, color);
     }
+    layer.save();
     ctx.fillStyle = linearGradient;
     ctx.fillRect(x, y, width, height);
+    layer.restore();
   };
   layer.drawRoundedRect = (opt: {
     x: number;
@@ -285,23 +300,61 @@ export function connectLayer(
     colors: { step: number; color: string }[];
   }) => {
     const { x, y, width, height, rx, ry, colors } = opt;
-    if (colors.length === 0) {
-      return;
-    }
+    // if (colors.length === 0) {
+    //   return;
+    // }
+    // const ctx = {
+    //   fillStyle: "",
+    //   fill() {},
+    //   createLinearGradient(...args: any[]) {
+    //     return {
+    //       addColorStop(...args: any[]) {},
+    //     };
+    //   },
+    //   beginPath() {},
+    //   arc() {},
+    //   moveTo() {},
+    //   lineTo() {},
+    //   bezierCurveTo() {},
+    //   closePath() {},
+    // };
     if (colors.length === 1) {
       const color = colors[0].color;
-      drawFigmaSmoothCorners(ctx, { width, height }, 80, 80, x, y, true, true, true, true, true);
-      ctx.fillStyle = color;
-      ctx.fill();
-      return;
+      // layer.save();
+      const r = drawFigmaSmoothCorners({ width, height }, 120, 80, x, y);
+      // ctx.fillStyle = color;
+      // ctx.fill();
+      // layer.restore();
+      return r;
     }
-    const linearGradient = ctx.createLinearGradient(0, 0, canvas.size.width, canvas.size.height);
-    for (let i = 0; i < colors.length; i += 1) {
-      const { step, color } = colors[i];
-      linearGradient.addColorStop(step, color);
-    }
-    drawFigmaSmoothCorners(ctx, { width, height }, 80, 80, x, y);
-    ctx.fillStyle = linearGradient;
+    // const linearGradient = ctx.createLinearGradient(0, 0, canvas.size.width, canvas.size.height);
+    // for (let i = 0; i < colors.length; i += 1) {
+    //   const { step, color } = colors[i];
+    //   linearGradient.addColorStop(step, color);
+    // }
+    // layer.save();
+    const r = drawFigmaSmoothCorners({ width, height }, 120, 80, x, y);
+    // ctx.fillStyle = linearGradient;
+    // ctx.fill();
+    // layer.restore();
+    return r;
+  };
+  layer.drawArcPie = (opt: {
+    x: number;
+    y: number;
+    radius: number;
+    start: { x: number; y: number };
+    arc1: number;
+    arc2: number;
+  }) => {
+    const { x, y, radius, start, arc1, arc2 } = opt;
+    ctx.moveTo(x, y);
+    ctx.beginPath();
+    ctx.lineTo(start.x, start.y);
+    ctx.arc(x, y, radius, arc1, arc2);
+    // ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fillStyle = "red";
     ctx.fill();
   };
   layer.clear = () => {
@@ -330,6 +383,7 @@ export function connectLayer(
     counterclockwise?: boolean
   ) => {
     log(`ctx.arc(${x}, ${y}, ${radius}, ${startAngle}, ${endAngle}, ${Boolean(counterclockwise)});`);
+    ctx.arc(x, y, radius, startAngle, endAngle, counterclockwise);
   };
   layer.bezierCurveTo = (cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number) => {
     log(`ctx.bezierCurveTo(${cp1x}, ${cp1y}, ${cp2x}, ${cp2y}, ${x}, ${y});`);
