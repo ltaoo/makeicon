@@ -236,6 +236,17 @@ export function LinePath(props: BezierPathProps) {
     get segments() {
       return _segments;
     },
+    refreshSegments() {
+      let i = 0;
+      let start = _path_points[i];
+      i += 1;
+      while (i < _path_points.length) {
+        let point = _path_points[i];
+        this.createSegmentFromTwoPoint(start, point);
+        start = point;
+        i += 1;
+      }
+    },
     createSegment(point: BezierPoint) {
       const end = point;
       const start = this.findPrevPointOfPoint(point);
@@ -261,6 +272,7 @@ export function LinePath(props: BezierPathProps) {
         segment.setControls(start.to, end.from);
       }
       segment.ensure();
+      return segment;
     },
     /**
      * 存入了一个锚点，其实就是创建了一条曲线
@@ -293,7 +305,6 @@ export function LinePath(props: BezierPathProps) {
       }
       return false;
     },
-
     startMove(pos: { x: number; y: number }) {
       for (let i = 0; i < _path_points.length; i += 1) {
         const point = _path_points[i];
@@ -322,9 +333,10 @@ export function LinePath(props: BezierPathProps) {
         x1: 0,
         y1: 0,
       };
-      console.log("[BIZ]path/index - buildBox the _segments count is", _segments.length);
+      // console.log("[BIZ]path/index - buildBox the _segments count is", _segments.length);
       for (let i = 0; i < _segments.length; i += 1) {
         const box = _segments[i].box();
+        // console.log("[BIZ]path/index - segment box is", box);
         if (box) {
           (() => {
             const { min, max } = box.x;
@@ -347,6 +359,7 @@ export function LinePath(props: BezierPathProps) {
         }
       }
       _box = rect;
+      // console.log("[BIZ]path/index - _box is", _box);
       return rect;
     },
     buildOutline(options: Partial<{ width: number; cap: LineCapType; scene: number }> = {}) {

@@ -92,7 +92,7 @@ export function connectLayer(
     const x = point.x;
     const y = point.y;
     // @ts-ignore
-    ctx.fillText(`${x},${y}`, x + 2, y - 2);
+    // ctx.fillText(`${x},${y}`, x + 2, y - 2);
   };
   layer.drawRect = (
     rect: { x: number; y: number; x1: number; y1: number },

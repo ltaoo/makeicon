@@ -20,6 +20,7 @@ import { PathParser } from "@/biz/svg/path-parser";
 
 import { buildPath, opentypeCommandsToTokens } from "./utils";
 import { CanvasLayer } from "./layer";
+import { v } from "vitest/dist/types-e3c9754d";
 
 let debug = false;
 
@@ -154,7 +155,6 @@ export function CanvasConverter(props: {
               if (c === "A" && a2) {
                 const [x, y, xr, yr, rotate, laf, sf, x1, y1] = a2;
                 const rrr = [xr, yr, rotate, laf, sf, ...this.transformPos2({ x: x1, y: y1 }, { scale })].join(" ");
-                console.log("build SVG of A", a2, rrr);
                 d += `A${rrr}`;
                 return;
               }
@@ -316,6 +316,7 @@ export function CanvasConverter(props: {
       }[]
     ) {
       const lines: Line[] = [];
+      // console.log("[BIZ]canvas/converter - buildBezierPathsFromOpentype", commands);
       const tokens = opentypeCommandsToTokens(commands);
       const line = Line({
         fill: {
@@ -323,6 +324,8 @@ export function CanvasConverter(props: {
         },
         stroke: null,
       });
+      line.setEditing(false);
+      // line.select();
       this.buildPath(line, tokens, { exp: false, scale: 1 });
       lines.push(line);
       return {
@@ -374,18 +377,23 @@ export function CanvasConverter(props: {
       const yExtra = extra;
       buildPath(path, tokens, {
         normalizeX: (v: number) => {
+          // return v;
           return this.scaleX(v, xExtra);
         },
         normalizeY: (v: number) => {
+          // return v;
           return this.scaleY(v, yExtra);
         },
         translate: (point: { x: number; y: number }) => {
+          // return point;
           return this.translate(point);
         },
         translateX: (v: number) => {
+          // return v;
           return this.translateX(v);
         },
         translateY: (v: number) => {
+          // return v;
           return this.translateY(v);
         },
       });

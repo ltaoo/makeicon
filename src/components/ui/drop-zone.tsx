@@ -34,12 +34,12 @@ export function DropArea(props: { store: DragZoneCore } & JSX.HTMLAttributes<HTM
       >
         <div class="flex items-center justify-center h-full p-4 text-center">
           <div>
-            <p>拖动 SVG 文件到此处</p>
+            <p>{state().tip}</p>
             <input type="file" class="absolute inset-0 opacity-0 cursor-pointer" />
           </div>
         </div>
       </div>
-      {props.children}
+      <div class="w-full h-full" style={{ display: state().selected ? "block" : "none" }}>{props.children}</div>
     </div>
   );
 }

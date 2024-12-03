@@ -10,15 +10,18 @@ type TheTypesOfEvents = {
 };
 
 type DragZoneProps = {
+  tip?: string;
   onChange?: (files: File[]) => void;
 };
 type DragZoneState = {
   hovering: boolean;
   selected: boolean;
   files: File[];
+  tip: string;
 };
 
 export class DragZoneCore extends BaseDomain<TheTypesOfEvents> {
+  _tip = "拖动文件到此处";
   _hovering: boolean = false;
   _selected: boolean = false;
   _files: File[] = [];
@@ -28,13 +31,17 @@ export class DragZoneCore extends BaseDomain<TheTypesOfEvents> {
       hovering: this._hovering,
       selected: this._selected,
       files: this._files,
+      tip: this._tip,
     };
   }
 
   constructor(props: Partial<{ _name: string }> & DragZoneProps = {}) {
     super(props);
 
-    const { onChange } = props;
+    const { tip, onChange } = props;
+    if (tip) {
+      this._tip = tip;
+    }
     if (onChange) {
       this.onChange(onChange);
     }

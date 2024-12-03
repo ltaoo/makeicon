@@ -177,6 +177,7 @@ export function Line(props: PathProps) {
       // console.log("[BIZ]line/index - buildBox the _paths count is", _paths.length);
       for (let i = 0; i < _paths.length; i += 1) {
         const box = _paths[i].buildBox();
+        // console.log("[BIZ]line/index - refreshBox", box);
         if (box) {
           (() => {
             if (rect.x === 0 || rect.x > box.x) {
@@ -215,6 +216,9 @@ export function Line(props: PathProps) {
     },
     setComposite(v: PathCompositeOperation) {
       _composite = v;
+    },
+    select() {
+      _$obj.select();
     },
     unselect() {
       _$obj.unselect();

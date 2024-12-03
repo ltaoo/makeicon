@@ -1,6 +1,13 @@
 import { base, Handler } from "@/domains/base";
 
-import { checkPosInBox, createEmptyRectShape, degToRadian, getAngle, calcNewStyleOfTransformingBox, uuidFactory } from "./utils";
+import {
+  checkPosInBox,
+  createEmptyRectShape,
+  degToRadian,
+  getAngle,
+  calcNewStyleOfTransformingBox,
+  uuidFactory,
+} from "./utils";
 import { Position, RectShape, Size } from "./types";
 import { CursorType } from "./constants";
 
@@ -244,6 +251,7 @@ export function CanvasObject(props: CanvasObjectProps) {
       return null;
     },
     checkInBox(pos: { x: number; y: number }) {
+      // console.log("[BIZ]canvas/object - checkInBox", pos, _client);
       return checkPosInBox(pos, _client);
     },
     handleMouseDown(pos: { x: number; y: number }) {

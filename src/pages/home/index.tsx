@@ -24,13 +24,15 @@ import { base, Handler } from "@/domains/base";
 import { blobToArrayBuffer, loadImage, readFileAsArrayBuffer } from "@/utils/browser";
 import { DragZoneCore } from "@/domains/ui/drag-zone";
 import { DropArea } from "@/components/ui/drop-zone";
-import { render } from "solid-js/web";
+import { FileThumb } from "@/components/FileThumb";
 
 function HomeIndexPageCore(props: ViewComponentProps) {
   const { app } = props;
 
   let _icons: ReturnType<typeof $$canvas.buildPreviewIcons> = [];
   let _code = "";
+  let _tool = "text";
+  let _font: opentype.Font | null = null;
 
   function preview() {
     const result = $$canvas.buildPreviewIcons();
@@ -224,7 +226,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       const font = opentype.parse(buffer);
       const r = font.getPath("MakeIcon", 0, 0, 200);
       const { paths } = $$canvas.buildBezierPathsFromOpentype(r.commands);
-      $$canvas.appendObject(paths);
+      $$canvas.appendObjects(paths);
       preview();
     },
   });
@@ -247,7 +249,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       }
       const { dimensions, gradients, paths } = result;
       $$canvas.saveGradients(gradients);
-      $$canvas.appendObject(paths, { transform: true, dimensions });
+      $$canvas.appendObjects(paths, { transform: true, dimensions });
       draw();
       preview();
       $dialog.hide();
@@ -335,6 +337,39 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       });
     },
   });
+  const $textInput = new InputCore({
+    defaultValue: "",
+    onEnter() {
+      $textSubmit.click();
+    },
+  });
+  const $textSubmit = new ButtonCore({
+    onClick() {
+      const value = $textInput.value;
+      if (!value) {
+        app.tip({
+          text: ["请先输入文字"],
+        });
+        return;
+      }
+      if (!_font) {
+        app.tip({
+          text: ["请先上传字体文件"],
+        });
+        return;
+      }
+      const fontSize = 200;
+      const x = 0;
+      const y = fontSize;
+      const path = _font.getPath(value, x, y, fontSize);
+      const { paths } = $$canvas.buildBezierPathsFromOpentype(path.commands);
+      $$canvas.appendObjects(paths);
+      draw();
+      preview();
+    },
+  });
+  const $textUpload = new DragZoneCore();
+
   $$canvas.$selection.onChange((state) => {
     const $layer = $$canvas.layers.range;
     $layer.clear();
@@ -351,6 +386,11 @@ function HomeIndexPageCore(props: ViewComponentProps) {
   $drop.onChange(async (files) => {
     const file = files[0];
     handleFile(file);
+  });
+  $textUpload.onChange(async (files) => {
+    const buffer = await files[0].arrayBuffer();
+    const font = opentype.parse(buffer);
+    _font = font;
   });
   app.onKeyup(({ code }) => {
     if (code === "Backspace") {
@@ -373,6 +413,9 @@ function HomeIndexPageCore(props: ViewComponentProps) {
     },
     get code() {
       return _code;
+    },
+    get tool() {
+      return _tool;
     },
   };
 
@@ -398,9 +441,19 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       $svg,
       $downloadSVG,
       $downloadPNG,
+      $textInput,
+      $textSubmit,
+      $textUpload,
     },
     ready() {
       preview();
+    },
+    selectTool(t: string) {
+      if (_tool === t) {
+        return;
+      }
+      _tool = t;
+      bus.emit(Events.Change, { ...state });
     },
     onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
       return bus.on(Events.Change, handler);
@@ -494,19 +547,34 @@ export const HomeIndexPage: ViewComponent = (props) => {
       </div>
       <div class="fixed left-[24px] top-[128px]" style={{ "z-index": 9999 }}>
         <div class="p-4 space-y-8">
-          <div class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl">
+          <div
+            class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl"
+            onClick={() => {
+              $page.selectTool("icon");
+            }}
+          >
             <div class="">
               <PiIcon />
             </div>
             <div class="mt-2 text-sm">图标</div>
           </div>
-          <div class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl">
+          <div
+            class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl"
+            onClick={() => {
+              $page.selectTool("text");
+            }}
+          >
             <div class="">
               <Text />
             </div>
             <div class="mt-2 text-sm">文字</div>
           </div>
-          <div class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl">
+          <div
+            class="flex flex-col items-center justify-center p-2 rounded-md cursor-pointer hover:shadow-xl"
+            onClick={() => {
+              $page.selectTool("background");
+            }}
+          >
             <div class="">
               <Image />
             </div>
@@ -514,63 +582,87 @@ export const HomeIndexPage: ViewComponent = (props) => {
           </div>
         </div>
       </div>
-      <div class="panel__icon fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto" style={{ "z-index": 9999 }}>
-        <div class="h-full p-4 w-[360px] bg-white border rounded-md">
-          <section class="icon-24">
-            <h1>Usage (full module)</h1>
-            <div>
-              Icons referenced by name (as SVG, as SPAN):
-              <Icon icon="mdi:home" />
-              <Icon icon="mdi:home" mode="style" />
-            </div>
-            <div class="alert">
-              <Icon icon="mdi-light:alert" />
-              Important notice with alert icon!
-            </div>
-          </section>
-          <section class="icon-24">
-            <h1>Usage (offline mode: using preloaded icons)</h1>
-            <div>
-              Icons referenced by name (as SVG, as SPAN): <Icon icon="demo" />
-              <Icon icon="demo" mode="style" />
-            </div>
-            <div>
-              Icons referenced by object (as SVG, as SPAN): <Icon icon={accountIcon} />
-              <Icon icon={accountIcon} mode="style" />
-            </div>
-            <div>
-              2 icons imported from icon set: <Icon icon="test:alert1" />
-              <Icon icon="test:link1" mode="style" />
-            </div>
-            <div class="alert">
-              <Icon icon={alertIcon} mode="mask" />
-              Important notice with alert icon!
-            </div>
-          </section>
-          <section class="inline-demo">
-            <h1>Inline demo</h1>
-            <div>
-              Block icon (behaving like image):
-              <Icon icon="experiment2" />
-              <Icon icon="experiment2" inline={true} style="vertical-align: 0" />
-            </div>
-            <div>
-              Inline icon (behaving line text / icon font):
-              <Icon icon="experiment2" inline={true} />
-              <Icon icon="experiment2" style={{ "vertical-align": "-0.125em" }} />
-            </div>
-          </section>
+      <Show when={page().tool === "icon"}>
+        <div
+          class="panel__icon fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto"
+          style={{ "z-index": 9999 }}
+        >
+          <div class="h-full p-4 w-[360px] bg-white border rounded-md">
+            <section class="icon-24">
+              <h1>Usage (full module)</h1>
+              <div>
+                Icons referenced by name (as SVG, as SPAN):
+                <Icon icon="mdi:home" />
+                <Icon icon="mdi:home" mode="style" />
+              </div>
+              <div class="alert">
+                <Icon icon="mdi-light:alert" />
+                Important notice with alert icon!
+              </div>
+            </section>
+            <section class="icon-24">
+              <h1>Usage (offline mode: using preloaded icons)</h1>
+              <div>
+                Icons referenced by name (as SVG, as SPAN): <Icon icon="demo" />
+                <Icon icon="demo" mode="style" />
+              </div>
+              <div>
+                Icons referenced by object (as SVG, as SPAN): <Icon icon={accountIcon} />
+                <Icon icon={accountIcon} mode="style" />
+              </div>
+              <div>
+                2 icons imported from icon set: <Icon icon="test:alert1" />
+                <Icon icon="test:link1" mode="style" />
+              </div>
+              <div class="alert">
+                <Icon icon={alertIcon} mode="mask" />
+                Important notice with alert icon!
+              </div>
+            </section>
+            <section class="inline-demo">
+              <h1>Inline demo</h1>
+              <div>
+                Block icon (behaving like image):
+                <Icon icon="experiment2" />
+                <Icon icon="experiment2" inline={true} style="vertical-align: 0" />
+              </div>
+              <div>
+                Inline icon (behaving line text / icon font):
+                <Icon icon="experiment2" inline={true} />
+                <Icon icon="experiment2" style={{ "vertical-align": "-0.125em" }} />
+              </div>
+            </section>
+          </div>
         </div>
-      </div>
-      <div class="panel__text fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto" style={{ "z-index": 9999 }}>
-        <div class="h-full p-4 w-[360px] bg-white border rounded-md"></div>
-      </div>
-      <div
-        class="panel__background fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto"
-        style={{ "z-index": 9999 }}
-      >
-        <div class="h-full p-4 w-[360px] bg-white border rounded-md"></div>
-      </div>
+      </Show>
+      <Show when={page().tool === "text"}>
+        <div
+          class="panel__text fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto"
+          style={{ "z-index": 9999 }}
+        >
+          <div class="h-full p-4 w-[360px] bg-white border rounded-md">
+            <div>
+              <div class="relative w-full h-[240px]">
+                <DropArea store={$page.ui.$textUpload}>
+                  <FileThumb filename="tetttt" />
+                </DropArea>
+              </div>
+              <div class="flex items-center mt-8 space-x-2">
+                <Input store={$page.ui.$textInput} />
+                <Button store={$page.ui.$textSubmit}>插入画布</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
+      <Show when={page().tool === "background"}>
+        <div
+          class="panel__background fixed left-[128px] top-[24px] bottom-[24px] overflow-y-auto"
+          style={{ "z-index": 9999 }}
+        >
+          <div class="h-full p-4 w-[360px] bg-white border rounded-md"></div>
+        </div>
+      </Show>
       <div class="fixed right-[48px] top-[24px] bottom-[24px] overflow-y-auto" style={{ "z-index": 9999 }}>
         <div class="h-full border rounded-xl rounded-xl bg-white">
           <div>

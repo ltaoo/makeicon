@@ -48,10 +48,8 @@ export function Canvas(props: CanvasProps) {
     background: CanvasLayer({
       zIndex: 0,
       onMounted(layer) {
-        // const $background = _layers.background;
         const $background = layer;
         const grid = _grid;
-        // const $frame = _layers.frame;
         const path = $background.drawRoundedRect({
           x: grid.x,
           y: grid.y,
@@ -346,15 +344,48 @@ export function Canvas(props: CanvasProps) {
       console.log("[BIZ]canvas/index - getGradient", id, _gradients);
       return _gradients.find((g) => g.id === id);
     },
-    appendObject(
+    appendObjects(
       paths: Line[],
       extra: Partial<{ transform: boolean; dimensions: { width: number; height: number } }> = {}
     ) {
-      _lines = paths;
+      for (let i = 0; i < paths.length; i += 1) {
+        const line = paths[i];
+        this.appendLine(line);
+        for (let j = 0; j < line.paths.length; j += 1) {
+          const p = line.paths[j];
+          p.refreshSegments();
+        }
+        line.refreshBox();
+      }
       // _lines = this.format(paths);
       // _paths = _lines.reduce((prev, cur) => {
       //   return prev.concat(cur.paths);
       // }, [] as LinePath[]);
+    },
+    appendLine(line: Line) {
+      line.onSelect(() => {
+        bus.emit(Events.Select, line);
+        bus.emit(Events.Refresh);
+      });
+      line.onUnselect(() => {
+        // console.log("[BIZ]canvas/index - line.onUnselect");
+        bus.emit(Events.UnSelect, line);
+        bus.emit(Events.Refresh);
+      });
+      line.onDragging(() => {
+        bus.emit(Events.Refresh);
+      });
+      line.onCursorChange((v) => {
+        if (_cursor === v) {
+          return;
+        }
+        _cursor = v;
+        bus.emit(Events.Change, { ..._state });
+      });
+      // line.onDoubleClick(() => {
+      //   bus.emit(Events.Refresh);
+      // });
+      _lines.push(line);
     },
     inGrid(pos: { x: number; y: number }) {
       if (pos.x >= _grid.x && pos.x <= _grid.x + _grid.width && pos.y >= _grid.y && pos.y <= _grid.y + _grid.height) {
@@ -407,7 +438,7 @@ export function Canvas(props: CanvasProps) {
           }
           return null;
         })();
-        // console.log("[BIZ]canvas/index - before if(clicked", clicked, _cur_object, clicked === _cur_object);
+        console.log("[BIZ]canvas/index - before if(clicked", clicked, _cur_object, clicked === _cur_object);
         if (clicked) {
           if (_cur_object) {
             if (_cur_object !== clicked) {
@@ -432,14 +463,15 @@ export function Canvas(props: CanvasProps) {
     },
     handleMouseMove(pos: { x: number; y: number }) {
       // const pos = toFixPoint(event);
-      // console.log("[BIZ]canvas/index - handleMouseMove", _cur_object);
+      // console.log("[BIZ]canvas/index - handleMouseMove", _$mode.value, _cur_object);
       _$pointer.handleMouseMove(pos);
-      if (_cur_object) {
-        _cur_object.handleMouseMove(pos);
-        return;
-      }
       if (_$mode.value === "default.select") {
+        if (_cur_object) {
+          _cur_object.handleMouseMove(pos);
+          return;
+        }
         _$selection.rangeSelect(pos);
+        return;
       }
       if (["path_editing.pen", "path_editing.select"].includes(_$mode.value)) {
         _$path_editing.handleMouseMove(pos);
@@ -503,29 +535,7 @@ export function Canvas(props: CanvasProps) {
     bus.emit(Events.Change, { ..._state });
   });
   _$path_editing.onCreateLine((line) => {
-    line.onSelect(() => {
-      bus.emit(Events.Select, line);
-      bus.emit(Events.Refresh);
-    });
-    line.onUnselect(() => {
-      // console.log("[BIZ]canvas/index - line.onUnselect");
-      bus.emit(Events.UnSelect, line);
-      bus.emit(Events.Refresh);
-    });
-    line.onDragging(() => {
-      bus.emit(Events.Refresh);
-    });
-    line.onCursorChange((v) => {
-      if (_cursor === v) {
-        return;
-      }
-      _cursor = v;
-      bus.emit(Events.Change, { ..._state });
-    });
-    // line.onDoubleClick(() => {
-    //   bus.emit(Events.Refresh);
-    // });
-    _lines.push(line);
+    ins.appendLine(line);
     // _objects.push(line.obj);
   });
   _$path_editing.onCursorChange((v) => {

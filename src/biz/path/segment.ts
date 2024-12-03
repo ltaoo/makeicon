@@ -66,7 +66,24 @@ export function PathSegment(props: PathSegmentProps) {
         return null;
       }
       if (!_bezier) {
-        return null;
+        // 直线
+        const x1 = _start.x;
+        const y1 = _start.y;
+        const x2 = _end.x;
+        const y2 = _end.y;
+        const isReverse = x1 > x2 || y1 > y2;
+        return {
+          x: {
+            min: isReverse ? x2 : x1,
+            max: isReverse ? x1 : x2,
+            size: isReverse ? x1 - x2 : x2 - x1,
+          },
+          y: {
+            min: isReverse ? y2 : y1,
+            max: isReverse ? y1 : y2,
+            size: isReverse ? y1 - y2 : y2 - y1,
+          },
+        };
       }
       _bezier.update();
       // console.log("[BIZ]path/segment - box", _bezier.points);
