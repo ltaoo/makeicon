@@ -253,11 +253,17 @@ export class PathParser {
         if (fill !== "none") {
           payload.fill = fill;
         }
+        if (fill === "currentColor") {
+          payload.fill = "black";
+        }
       }
       if (strokeMatch) {
         const stroke = strokeMatch[1];
         if (stroke !== "none") {
           payload.stroke = stroke;
+        }
+        if (stroke === "currentColor") {
+          payload.stroke = "black";
         }
       }
       if (strokeWidthMatch) {

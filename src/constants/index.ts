@@ -1,342 +1,89 @@
 // @ts-ignore
 export const __VERSION__ = process.global.__VERSION__;
 
-export const code = `const oo = document;
-const jj = JSON;
-const ll = localStorage;
-function m() {
-    const DEVICE_ID_KEY_IN_COOKIE = "cna";
-    const user = jj.parse(ll.getItem("token") || "null");
-    if (user === null) {
-        alert("请先登录");
-        return;
-    }
-    const cookies = pp(oo.cookie);
-    const device_id = cookies[DEVICE_ID_KEY_IN_COOKIE];
-    if (!device_id) {
-        alert("请先登录");
-        return;
-    }
-    const {access_token, avatar, default_drive_id, expire_time, nick_name, refresh_token, user_id, user_name, } = user;
-    const result = {
-        app_id: window.Global.app_id,
-        drive_id: default_drive_id,
-        device_id,
-        user_id,
-        nick_name,
-        user_name,
-        avatar,
-        access_token,
-        refresh_token,
-    };
-    const result_str = jj.stringify(result);
-    cc(result_str);
-    console.log("云盘信息已复制到粘贴板，请粘贴到新增云盘处");
-    return result_str;
-}
-function pp(cookie_str) {
-    if (!cookie_str) {
-        return {};
-    }
-    const result = {};
-    const key_and_values = cookie_str.split("; ");
-    for (let i = 0; i < key_and_values.length; i += 1) {
-        const [key,value] = key_and_values[i].split("=");
-        result[key] = value;
-    }
-    return result;
-}
-function cc(str) {
-    const textArea = oo.createElement("textarea");
-    textArea.value = str;
-    oo.body.appendChild(textArea);
-    textArea.select();
-    oo.execCommand("copy");
-    oo.body.removeChild(textArea);
-}
-m();`;
-
-const code_prefix = "";
-// esbuild index.js --outfile=dist/index.js --format=cjs --bundle --minify
-// 压缩后的代码
-export const code_get_drive_token = `${code_prefix}var o=document,i=JSON,m=localStorage;function k(){let t="cna",e=i.parse(m.getItem("token")||"null");if(e===null){alert("\u8BF7\u5148\u767B\u5F55");return}let n=v(o.cookie)[t];if(!n){alert("请先登录");return}let{access_token:r,avatar:s,default_drive_id:a,expire_time:g,nick_name:u,refresh_token:d,user_id:_,user_name:p}=e,f={app_id:window.Global.app_id,drive_id:a,device_id:n,user_id:_,nick_name:u,user_name:p,avatar:s,access_token:r,refresh_token:d},l=i.stringify(f);return y(l),console.log("云盘信息已复制到粘贴板，请粘贴到新增云盘处"),l}function v(t){if(!t)return{};let e={},c=t.split("; ");for(let n=0;n<c.length;n+=1){let[r,s]=c[n].split("=");e[r]=s}return e}function y(t){let e=o.createElement("textarea");e.value=t,o.body.appendChild(e),e.select(),o.execCommand("copy"),o.body.removeChild(e)}k();`;
-
-export enum FileType {
-  File = 1,
-  Folder = 2,
-}
-
-export enum DriveFileType {
-  File = 1,
-  Folder = 2,
-  Unknown = 3,
-}
-
-/**
- * @doc https://www.iso.org/standard/63545.html
- */
-export enum MediaOriginCountries {
-  US = "US", // 美国 (United States)
-  CN = "CN", // 中国 (China)
-  TW = "TW", // 中国台湾 (Taiwan)
-  HK = "HK", // 中国香港 (Hong Kong)
-  JP = "JP", // 日本 (Japan)
-  DE = "DE", // 德国 (Germany)
-  GB = "GB", // 英国 (United Kingdom)
-  FR = "FR", // 法国 (France)
-  IT = "IT", // 意大利 (Italy)
-  BR = "BR", // 巴西 (Brazil)
-  CA = "CA", // 加拿大 (Canada)
-  AU = "AU", // 澳大利亚 (Australia)
-  IN = "IN", // 印度 (India)
-  RU = "RU", // 俄罗斯 (Russia)
-  KR = "KR", // 韩国 (South Korea)
-  BE = "BE", // 比利时
-  ES = "ES", // 西班牙 (Spain)
-  MX = "MX", // 墨西哥 (Mexico)
-  ID = "ID", // 印度尼西亚 (Indonesia)
-  TR = "TR", // 土耳其 (Turkey)
-  SA = "SA", // 沙特阿拉伯 (Saudi Arabia)
-  ZA = "ZA", // 南非 (South Africa)
-  AR = "AR", // 阿根廷 (Argentina)
-  TH = "TH", // 泰国 (Thailand)
-  EG = "EG", // 埃及 (Egypt)
-  NL = "NL", // 荷兰 (Netherlands)
-  CH = "CH", // 瑞士 (Switzerland)
-  SE = "SE", // 瑞典 (Sweden)
-  PL = "PL", // 波兰 (Poland)
-  PK = "PK", // 巴基斯坦 (Pakistan)
-  NG = "NG", // 尼日利亚 (Nigeria)
-  MY = "MY", // 马来西亚 (Malaysia)
-  BD = "BD", // 孟加拉国 (Bangladesh)
-}
-
-export const SeasonMediaOriginCountryTextMap: Record<MediaOriginCountries, string> = {
-  [MediaOriginCountries.CN]: "国产剧",
-  [MediaOriginCountries.TW]: "台剧",
-  [MediaOriginCountries.HK]: "港剧",
-  [MediaOriginCountries.JP]: "日剧",
-  [MediaOriginCountries.KR]: "韩剧",
-  [MediaOriginCountries.US]: "美剧",
-  [MediaOriginCountries.GB]: "英剧",
-  [MediaOriginCountries.FR]: "法国",
-  [MediaOriginCountries.IT]: "意大利",
-  [MediaOriginCountries.BR]: "巴西",
-  [MediaOriginCountries.DE]: "德国",
-  [MediaOriginCountries.CA]: "加拿大",
-  [MediaOriginCountries.AU]: "澳大利亚",
-  [MediaOriginCountries.IN]: "印度",
-  [MediaOriginCountries.RU]: "俄罗斯",
-  [MediaOriginCountries.ES]: "西班牙",
-  [MediaOriginCountries.MX]: "墨西哥",
-  [MediaOriginCountries.ID]: "印度尼西亚",
-  [MediaOriginCountries.TR]: "土耳其",
-  [MediaOriginCountries.SA]: "沙特阿拉伯",
-  [MediaOriginCountries.ZA]: "南非",
-  [MediaOriginCountries.AR]: "阿根廷",
-  [MediaOriginCountries.TH]: "泰国",
-  [MediaOriginCountries.EG]: "埃及",
-  [MediaOriginCountries.NL]: "荷兰",
-  [MediaOriginCountries.CH]: "瑞士",
-  [MediaOriginCountries.SE]: "瑞典",
-  [MediaOriginCountries.PL]: "波兰",
-  [MediaOriginCountries.PK]: "巴基斯坦",
-  [MediaOriginCountries.NG]: "尼日利亚",
-  [MediaOriginCountries.MY]: "马来西亚",
-  [MediaOriginCountries.BD]: "孟加拉国",
-  [MediaOriginCountries.BE]: "比利时",
-};
-
-export const MovieMediaOriginCountryTextMap: Record<MediaOriginCountries, string> = {
-  [MediaOriginCountries.CN]: "中国大陆",
-  [MediaOriginCountries.TW]: "中国台湾",
-  [MediaOriginCountries.HK]: "中国香港",
-  [MediaOriginCountries.JP]: "日本",
-  [MediaOriginCountries.KR]: "韩国",
-  [MediaOriginCountries.US]: "美国",
-  [MediaOriginCountries.GB]: "英国",
-  [MediaOriginCountries.FR]: "法国",
-  [MediaOriginCountries.IT]: "意大利",
-  [MediaOriginCountries.BR]: "巴西",
-  [MediaOriginCountries.DE]: "德国",
-  [MediaOriginCountries.CA]: "加拿大",
-  [MediaOriginCountries.AU]: "澳大利亚",
-  [MediaOriginCountries.IN]: "印度",
-  [MediaOriginCountries.RU]: "俄罗斯",
-  [MediaOriginCountries.BE]: "比利时",
-  [MediaOriginCountries.ES]: "西班牙",
-  [MediaOriginCountries.MX]: "墨西哥",
-  [MediaOriginCountries.ID]: "印度尼西亚",
-  [MediaOriginCountries.TR]: "土耳其",
-  [MediaOriginCountries.SA]: "沙特阿拉伯",
-  [MediaOriginCountries.ZA]: "南非",
-  [MediaOriginCountries.AR]: "阿根廷",
-  [MediaOriginCountries.TH]: "泰国",
-  [MediaOriginCountries.EG]: "埃及",
-  [MediaOriginCountries.NL]: "荷兰",
-  [MediaOriginCountries.CH]: "瑞士",
-  [MediaOriginCountries.SE]: "瑞典",
-  [MediaOriginCountries.PL]: "波兰",
-  [MediaOriginCountries.PK]: "巴基斯坦",
-  [MediaOriginCountries.NG]: "尼日利亚",
-  [MediaOriginCountries.MY]: "马来西亚",
-  [MediaOriginCountries.BD]: "孟加拉国",
-};
-export const MediaSourceOptions = Object.keys(SeasonMediaOriginCountryTextMap)
-  .slice(0, 7)
-  .map((value) => {
-    return {
-      value,
-      label: SeasonMediaOriginCountryTextMap[value as MediaOriginCountries],
-    };
-  });
-export const TVGenres = [
-  "动作冒险",
-  "动画",
-  "喜剧",
-  "犯罪",
-  "纪录",
-  "剧情",
-  "家庭",
-  "儿童",
-  "悬疑",
-  "新闻",
-  "真人秀",
-  "Sci-Fi & Fantasy",
-  "肥皂剧",
-  "脱口秀",
-  "War & Politics",
-  "西部",
+export const ExampleIconSets = [
+  {
+    name: "material-symbols:3p-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M8 14h8v-.55q0-1.1-1.1-1.775T12 11t-2.9.675T8 13.45zm4-4q.825 0 1.413-.587T14 8t-.587-1.412T12 6t-1.412.588T10 8t.588 1.413T12 10m-6 8l-2.3 2.3q-.475.475-1.088.213T2 19.575V4q0-.825.588-1.412T4 2h16q.825 0 1.413.588T22 4v12q0 .825-.587 1.413T20 18z"/></svg>`,
+  },
+  {
+    name: "material-symbols:adb",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M5 11v-1q0-1.8.813-3.287T8 4.275L6.125 2.4L7 1.5l2.125 2.125q.65-.3 1.388-.462T12 3t1.488.163t1.387.462L17 1.5l.875.9L16 4.275q1.375.95 2.188 2.438T19 10v1zm10-2q.425 0 .713-.288T16 8t-.288-.712T15 7t-.712.288T14 8t.288.713T15 9M9 9q.425 0 .713-.288T10 8t-.288-.712T9 7t-.712.288T8 8t.288.713T9 9m3 14q-2.925 0-4.962-2.037T5 16v-4h14v4q0 2.925-2.037 4.963T12 23"/></svg>`,
+  },
+  {
+    name: "material-symbols:air",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M11.5 20q-1.25 0-2.125-.875T8.5 17h2q0 .425.288.713T11.5 18t.713-.288T12.5 17t-.288-.712T11.5 16H2v-2h9.5q1.25 0 2.125.875T14.5 17t-.875 2.125T11.5 20M2 10V8h13.5q.65 0 1.075-.425T17 6.5t-.425-1.075T15.5 5t-1.075.425T14 6.5h-2q0-1.475 1.013-2.488T15.5 3t2.488 1.013T19 6.5t-1.012 2.488T15.5 10zm16.5 8v-2q.65 0 1.075-.425T20 14.5t-.425-1.075T18.5 13H2v-2h16.5q1.475 0 2.488 1.013T22 14.5t-1.012 2.488T18.5 18"/></svg>`,
+  },
+  {
+    name: "material-symbols:android",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M1 18q.225-2.675 1.638-4.925T6.4 9.5L4.55 6.3q-.15-.225-.075-.475T4.8 5.45q.2-.125.45-.05t.4.3L7.5 8.9Q9.65 8 12 8t4.5.9l1.85-3.2q.15-.225.4-.3t.45.05q.25.125.325.375t-.075.475L17.6 9.5q2.35 1.325 3.762 3.575T23 18zm6-2.75q.525 0 .888-.363T8.25 14t-.363-.888T7 12.75t-.888.363T5.75 14t.363.888t.887.362m10 0q.525 0 .888-.363T18.25 14t-.363-.888T17 12.75t-.888.363t-.362.887t.363.888t.887.362"/></svg>`,
+  },
+  {
+    name: "material-symbols:assistant-navigation-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 22q-2.075 0-3.9-.788t-3.175-2.137T2.788 15.9T2 12t.788-3.9t2.137-3.175T8.1 2.788T12 2t3.9.788t3.175 2.137T21.213 8.1T22 12t-.788 3.9t-2.137 3.175t-3.175 2.138T12 22m-3.3-5.375l3.075-1.35q.125-.05.238-.05t.237.05l3.05 1.35q.35.15.625-.112t.125-.613l-3.525-8.6q-.15-.35-.525-.35t-.525.35L7.95 15.9q-.15.35.125.613t.625.112"/></svg>`,
+  },
+  {
+    name: "material-symbols:avg-time",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M9 3V1h6v2zm1 11.75l-1.1-2.2q-.125-.275-.375-.413T8 12H3.05q.375-3.375 2.925-5.687T12 4q1.55 0 2.975.5t2.675 1.45l1.4-1.4l1.4 1.4l-1.4 1.4q.8 1.05 1.275 2.213T20.95 12h-4.325L14.9 8.55q-.275-.575-.9-.575t-.9.575zM12 22q-3.475 0-6.025-2.312T3.05 14h4.325L9.1 17.45q.275.575.9.575t.9-.575l3.1-6.2l1.1 2.2q.125.275.375.413T16 14h4.95q-.375 3.375-2.925 5.687T12 22"/></svg>`,
+  },
+  {
+    name: "material-symbols:barefoot",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M5.5 8q-.425 0-.712-.288T4.5 7t.288-.712T5.5 6t.713.288T6.5 7t-.288.713T5.5 8M10 22q-1.65 0-2.825-1.175T6 18v-6q0-2.5 1.75-4.25T12 6h1.825q1.725 0 2.95 1.163T18 10.025q0 1.15-.612 2.113T15.724 13.6q-.8.375-1.262 1.113T14 16.325V18q0 1.675-1.162 2.838T10 22M8 6q-.425 0-.712-.288T7 5v-.5q0-.425.288-.712T8 3.5t.713.288T9 4.5V5q0 .425-.288.713T8 6m3-1q-.425 0-.712-.288T10 4v-.5q0-.425.288-.712T11 2.5t.713.288T12 3.5V4q0 .425-.288.713T11 5m3 0q-.425 0-.712-.288T13 4V3q0-.425.288-.712T14 2t.713.288T15 3v1q0 .425-.288.713T14 5m3.5 1q-.625 0-1.062-.437T16 4.5v-1q0-.625.438-1.062T17.5 2t1.063.438T19 3.5v1q0 .625-.437 1.063T17.5 6"/></svg>`,
+  },
+  {
+    name: "material-symbols:bed",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M2 19v-6q0-.675.275-1.225T3 10.8V8q0-1.25.875-2.125T6 5h4q.575 0 1.075.213T12 5.8q.425-.375.925-.587T14 5h4q1.25 0 2.125.875T21 8v2.8q.45.425.725.975T22 13v6h-2v-2H4v2zm11-9h6V8q0-.425-.288-.712T18 7h-4q-.425 0-.712.288T13 8zm-8 0h6V8q0-.425-.288-.712T10 7H6q-.425 0-.712.288T5 8z"/></svg>`,
+  },
+  {
+    name: "material-symbols:bookmark-add-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M17 7h-1q-.425 0-.712-.288T15 6t.288-.712T16 5h1V4q0-.425.288-.712T18 3t.713.288T19 4v1h1q.425 0 .713.288T21 6t-.288.713T20 7h-1v1q0 .425-.288.713T18 9t-.712-.288T17 8zm-5 11l-4.2 1.8q-1 .425-1.9-.162T5 17.975V5q0-.825.588-1.412T7 3h5.625q.45 0 .675.4t.025.825q-.175.425-.25.85T13 6q0 1.8 1.138 3.175T17 10.9q.3.05.538.063t.462.012q.425 0 .713.263T19 11.9v6.075q0 1.075-.9 1.663t-1.9.162z"/></svg>`,
+  },
+  {
+    name: "material-symbols:bolt-outline-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m10.55 18.2l5.175-6.2h-4l.725-5.675L7.825 13H11.3zM9 15H5.9q-.6 0-.888-.537t.063-1.038l7.475-10.75q.25-.35.65-.487t.825.012t.625.525t.15.8L14 10h3.875q.65 0 .913.575t-.163 1.075L10.4 21.5q-.275.325-.675.425t-.775-.075t-.587-.537t-.163-.788zm2.775-2.75"/></svg>`,
+  },
+  {
+    name: "material-symbols:bolt-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M9 15H5.9q-.6 0-.888-.537t.063-1.038l7.475-10.75q.25-.35.65-.487t.825.012t.625.525t.15.8L14 10h3.875q.65 0 .913.575t-.163 1.075L10.4 21.5q-.275.325-.675.425t-.775-.075t-.587-.537t-.163-.788z"/></svg>`,
+  },
+  {
+    name: "material-symbols:bookmark-manager-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M14 21v-1.65q0-.2.075-.387t.225-.338l5.225-5.2q.225-.225.5-.325t.55-.1q.3 0 .575.113t.5.337l.925.925q.2.225.313.5t.112.55t-.1.563t-.325.512l-5.2 5.2q-.15.15-.337.225T16.65 22H15q-.425 0-.712-.287T14 21m6.575-4.6l.925-.975l-.925-.925l-.95.95zM4 20q-.825 0-1.412-.587T2 18V6q0-.825.588-1.412T4 4h5.175q.4 0 .763.15t.637.425L12 6h8q.825 0 1.413.588T22 8v2.075q0 .45-.363.725t-.837.2h-.275q-.7 0-1.312.25T18.1 12l-5.525 5.525q-.275.275-.425.638t-.15.762V19q0 .425-.288.713T11 20z"/></svg>`,
+  },
+  {
+    name: "material-symbols:brightness-empty-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M8.65 20H6q-.825 0-1.412-.587T4 18v-2.65L2.075 13.4q-.275-.3-.425-.662T1.5 12t.15-.737t.425-.663L4 8.65V6q0-.825.588-1.412T6 4h2.65l1.95-1.925q.3-.275.663-.425T12 1.5t.738.15t.662.425L15.35 4H18q.825 0 1.413.588T20 6v2.65l1.925 1.95q.275.3.425.663t.15.737t-.15.738t-.425.662L20 15.35V18q0 .825-.587 1.413T18 20h-2.65l-1.95 1.925q-.3.275-.662.425T12 22.5t-.737-.15t-.663-.425z"/></svg>`,
+  },
+  {
+    name: "material-symbols:browse",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M3 13V5q0-.825.588-1.412T5 3h6v10zM13 3h6q.825 0 1.413.588T21 5v4h-8zm0 18V11h8v8q0 .825-.587 1.413T19 21zM3 15h8v6H5q-.825 0-1.412-.587T3 19z"/></svg>`,
+  },
+  {
+    name: "material-symbols:calendar-today",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M5 22q-.825 0-1.412-.587T3 20V6q0-.825.588-1.412T5 4h1V2h2v2h8V2h2v2h1q.825 0 1.413.588T21 6v14q0 .825-.587 1.413T19 22zm0-2h14V10H5z"/></svg>`,
+  },
+  {
+    name: "material-symbols:cardiology",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m10.7 12.725l-.85-1.275q-.125-.2-.35-.325T9.025 11h-6.55Q2.2 10.35 2.1 9.75T2 8.5q0-2.35 1.575-3.925T7.5 3q1.3 0 2.475.55T12 5.1q.85-1 2.025-1.55T16.5 3q2.35 0 3.925 1.575T22 8.5q0 .65-.1 1.25T21.525 11h-5.95L13.85 8.45q-.15-.225-.387-.337T12.95 8q-.325 0-.562.188t-.338.487zM12 21.35l-1.45-1.3q-2.625-2.35-4.3-4.025T3.625 13h4.8l1.725 2.55q.15.225.388.338t.512.112q.325 0 .563-.187t.337-.488l1.35-4.075l.875 1.3q.125.2.35.325T15 13h5.375q-.95 1.35-2.625 3.025t-4.3 4.025z"/></svg>`,
+  },
+  {
+    name: "material-symbols:cards-star-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M5.7 21.875q-.825.125-1.487-.387T3.45 20.15L2.125 9.225q-.1-.825.4-1.475T3.85 7L5 6.85V15q0 1.65 1.175 2.825T9 19h9.3q-.15.6-.6 1.038t-1.1.512zM9 17q-.825 0-1.412-.587T7 15V4q0-.825.588-1.412T9 2h11q.825 0 1.413.588T22 4v11q0 .825-.587 1.413T20 17zm3.725-4.8l1.775-1.075l1.775 1.075q.15.1.288 0t.087-.275L16.175 9.9l1.55-1.35q.125-.125.087-.263t-.212-.162l-2.05-.175l-.825-1.9q-.05-.15-.225-.15t-.225.15l-.825 1.9l-2.05.175q-.175.025-.212.163t.087.262l1.55 1.35l-.475 2.025q-.05.175.088.275t.287 0"/></svg>`,
+  },
+  {
+    name: "material-symbols:cast-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M22 18q0 .825-.587 1.413T20 20h-4.175q-.35 0-.587-.262t-.263-.613q-.15-2.375-1.087-4.437t-2.45-3.663T7.912 8.4T3.576 7.1q-.65-.075-1.112-.512T2 5.5t.463-1.075T3.575 4H20q.825 0 1.413.588T22 6zM8 20q-.4 0-.7-.238t-.375-.637Q6.65 17.55 5.513 16.45T2.8 15.075q-.375-.05-.587-.362T2 14q0-.425.275-.712t.65-.238q2.35.3 4.013 1.975t1.987 4.025q.05.4-.225.675T8 20m4 0q-.425 0-.712-.275t-.338-.7q-.35-3.2-2.612-5.425t-5.463-2.55q-.4-.05-.638-.35T2 10q0-.425.263-.725t.637-.25q4.025.325 6.85 3.125t3.2 6.825q.05.425-.238.725T12 20m-8.75 0q-.525 0-.888-.363T2 18.75t.363-.888t.887-.362t.888.363t.362.887t-.363.888T3.25 20"/></svg>`,
+  },
+  {
+    name: "material-symbols:celebration-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M2.7 20L6.475 9.5q.125-.325.388-.5t.562-.175q.2 0 .375.075t.325.225l6.75 6.75q.15.15.225.325t.075.375q0 .3-.175.563t-.5.387L4 21.3q-.3.125-.575.038t-.475-.288t-.288-.475T2.7 20M23.025 7.025q-.225.225-.525.225t-.525-.225L21.9 6.95q-.35-.35-.875-.35t-.875.35l-5.075 5.075q-.225.225-.525.225t-.525-.225t-.225-.525t.225-.525L19.1 5.9q.8-.8 1.925-.8t1.925.8l.075.075q.225.225.225.525t-.225.525m-13.05-3Q10.2 3.8 10.5 3.8t.525.225l.125.125q.8.8.8 1.9t-.8 1.9l-.075.075q-.225.225-.525.225t-.525-.225T9.8 7.5t.225-.525L10.1 6.9q.35-.35.35-.85t-.35-.85l-.125-.125Q9.75 4.85 9.75 4.55t.225-.525m4.05-2q.225-.225.525-.225t.525.225L16.15 3.1q.8.8.8 1.925t-.8 1.925l-3.075 3.075q-.225.225-.525.225t-.525-.225T11.8 9.5t.225-.525L15.1 5.9q.35-.35.35-.875t-.35-.875l-1.075-1.075Q13.8 2.85 13.8 2.55t.225-.525m8 12q-.225.225-.525.225t-.525-.225L19.9 12.95q-.35-.35-.875-.35t-.875.35l-1.075 1.075q-.225.225-.525.225t-.525-.225t-.225-.525t.225-.525L17.1 11.9q.8-.8 1.925-.8t1.925.8l1.075 1.075q.225.225.225.525t-.225.525"/></svg>`,
+  },
+  {
+    name: "material-symbols:chart-data-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m10.45 12.975l1.3 1.3q.275.275.7.275t.7-.275l2.85-2.85v.6q0 .425.288.7T17 13t.713-.287T18 12V9q0-.425-.288-.712T17 8h-3.025q-.425 0-.7.288T13 9t.288.713T14 10h.575l-2.125 2.15l-1.3-1.3q-.275-.3-.7-.3t-.7.3L6.7 13.9q-.3.275-.3.7t.3.7q.275.3.7.3t.7-.3zM5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h14q.825 0 1.413.588T21 5v14q0 .825-.587 1.413T19 21z"/></svg>`,
+  },
+  {
+    name: "material-symbols:chess-rounded",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M4 22q-.425 0-.712-.288T3 21v-3q0-.825.588-1.412T5 16h1.3l.55-4H5q-.425 0-.712-.288T4 11t.288-.712T5 10h14q.425 0 .713.288T20 11t-.288.713T19 12h-1.85l.55 4H19q.825 0 1.413.588T21 18v3q0 .425-.288.713T20 22zM7.25 8.5q-.35 0-.625-.213t-.35-.562L5.45 4q-.05-.275.038-.488t.287-.337t.45-.137t.475.137q.45.25.925.4t1 .15q.725 0 1.375-.3t1.225-.75q.175-.125.375-.187t.4-.063t.4.063t.375.187q.575.45 1.225.75t1.375.3q.525 0 1-.163t.925-.412q.25-.125.488-.1t.437.15t.3.337t.05.463l-.825 3.725q-.075.35-.35.563t-.625.212z"/></svg>`,
+  },
 ];
-export const TVGenresOptions = TVGenres.map((text) => {
-  return {
-    label: text,
-    value: text,
-  };
-});
-export const MovieGenres = [
-  "动作",
-  "冒险",
-  "动画",
-  "喜剧",
-  "犯罪",
-  "纪录",
-  "剧情",
-  "家庭",
-  "奇幻",
-  "历史",
-  "恐怖",
-  "音乐",
-  "悬疑",
-  "爱情",
-  "科幻",
-  "电视电影",
-  "惊悚",
-  "战争",
-  "西部",
-];
-export const MovieGenresOptions = TVGenres.map((text) => {
-  return {
-    label: text,
-    value: text,
-  };
-});
-
-export enum ReportTypes {
-  /** 电视剧问题 */
-  TV,
-  /** 电影问题 */
-  Movie,
-  /** 问题与建议 */
-  Question,
-  /** 想看什么剧 */
-  Want,
-}
-export const ReportTypeTexts = {
-  [ReportTypes.TV]: "电视剧",
-  [ReportTypes.Movie]: "电影",
-  [ReportTypes.Question]: "问题反馈",
-  [ReportTypes.Want]: "想看",
-};
-export enum SubtitleLanguages {
-  Chs = "chs",
-  Cht = "cht",
-  Eng = "eng",
-  Jpn = "jpn",
-  ChsWithEng = "chs&eng",
-}
-export const SubtitleLanguageTexts = {
-  [SubtitleLanguages.Chs]: "中文",
-  [SubtitleLanguages.Cht]: "中文繁体",
-  [SubtitleLanguages.Eng]: "英文",
-  [SubtitleLanguages.Jpn]: "日文",
-  [SubtitleLanguages.ChsWithEng]: "中英对照",
-};
-export const SubtitleLanguageOptions = Object.keys(SubtitleLanguageTexts).map((lang) => {
-  return {
-    value: lang,
-    label: SubtitleLanguageTexts[lang as keyof typeof SubtitleLanguageTexts],
-  };
-});
-
-export enum DriveTypes {
-  /** 阿里云盘/备份盘 */
-  AliyunBackupDrive = 0,
-  /** 阿里云盘/资源盘 */
-  AliyunResourceDrive = 1,
-  /** 天翼云盘 */
-  Cloud189Drive = 2,
-  /** 夸克 */
-  QuarkDrive = 3,
-  /** 迅雷 */
-  XunleiDrive = 4,
-  /** 本地文件 */
-  LocalFolder = 5,
-}
-
-export enum MediaErrorTypes {
-  Unknown = 0,
-  Season = 1,
-  Movie = 2,
-  Episode = 3,
-  TV = 5,
-  TVProfile = 6,
-  SeasonProfile = 7,
-  MovieProfile = 8,
-  EpisodeProfile = 9,
-}
-export const MediaErrorTypeTextMap: Record<MediaErrorTypes, string> = {
-  [MediaErrorTypes.Unknown]: "未知",
-  [MediaErrorTypes.TVProfile]: "电视剧详情",
-  [MediaErrorTypes.SeasonProfile]: "季详情",
-  [MediaErrorTypes.EpisodeProfile]: "剧集详情",
-  [MediaErrorTypes.MovieProfile]: "电影详情",
-  [MediaErrorTypes.TV]: "电视剧",
-  [MediaErrorTypes.Season]: "季",
-  [MediaErrorTypes.Episode]: "剧集",
-  [MediaErrorTypes.Movie]: "电影",
-};
-export const MediaErrorTypeOptions = Object.keys(MediaErrorTypeTextMap).map((k) => {
-  return {
-    value: Number(k),
-    label: MediaErrorTypeTextMap[k as unknown as MediaErrorTypes],
-  };
-});
-
-export enum MediaTypes {
-  Season = 1,
-  Movie = 2,
-}
-
-export enum CollectionTypes {
-  /** 手动创建 */
-  Manually = 1,
-  /** 每日更新 */
-  DailyUpdate = 2,
-  /** 每日更新草稿 */
-  DailyUpdateDraft = 3,
-  /** 每日更新存档 */
-  DailyUpdateArchive = 4,
-  /** 手动创建的排行榜 */
-  ManuallyRank = 5,
-}

@@ -74,7 +74,6 @@ export function Canvas(props: CanvasProps) {
           visible: false,
         });
         line.append(path);
-        line.setEditing(false);
         _lines.push(line);
         bus.emit(Events.Refresh);
       },

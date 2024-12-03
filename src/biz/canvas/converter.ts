@@ -324,8 +324,6 @@ export function CanvasConverter(props: {
         },
         stroke: null,
       });
-      line.setEditing(false);
-      // line.select();
       this.buildPath(line, tokens, { exp: false, scale: 1 });
       lines.push(line);
       return {
@@ -343,7 +341,7 @@ export function CanvasConverter(props: {
         exp: false,
         scale: dimensions ? _grid.width / dimensions.width : 1,
       };
-      console.log("[BIZ]canvas/convert - buildBezierPathsFromPathString", data);
+      // console.log("[BIZ]canvas/convert - buildBezierPathsFromPathString", data);
       for (let j = 0; j < data.paths.length; j += 1) {
         const payload = data.paths[j];
         const content = payload.d;

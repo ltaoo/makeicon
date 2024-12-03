@@ -71,7 +71,7 @@ export function Line(props: PathProps) {
   let _composite = "source-over" as PathCompositeOperation;
   // let _box = { x: 0, y: 0, x1: 0, y1: 0 };
   // let _tmp_box: null | typeof _box = null;
-  let _editing = true;
+  let _editing = false;
   const _state = {
     get stroke() {
       return _stroke;

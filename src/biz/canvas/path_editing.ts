@@ -262,7 +262,7 @@ export function PathEditing(props: PathEditingProps) {
       }
       if (_$mode.value === "path_editing.select") {
         const found = checkIsClickPoint(pos);
-        console.log("[BIZ]canvas/path_editing - after checkIsClickPoint(pos)", found, _cur_point);
+        // console.log("[BIZ]canvas/path_editing - after checkIsClickPoint(pos)", found, _cur_point);
         for (let i = 0; i < _points.length; i += 1) {
           const { x, y } = _points[i];
           console.log(x, y);
@@ -509,6 +509,7 @@ export function PathEditing(props: PathEditingProps) {
               //   color: "#111111",
               // },
             });
+            _line.setEditing(true);
             bus.emit(Events.CreateLine, _line);
           }
           _line.append(_cur_line_path);

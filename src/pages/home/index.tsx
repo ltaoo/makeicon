@@ -7,7 +7,7 @@ import { Copy, Image, PiIcon, Plus, Sofa, SofaIcon, Text, TvIcon } from "lucide-
 import opentype from "opentype.js";
 import { optimize } from "svgo";
 import { saveAs } from "file-saver";
-import { Icon, addIcon, addCollection, disableCache } from "@iconify-icon/solid";
+import { Icon, disableCache, getIcon, listIcons } from "@iconify-icon/solid";
 import calendarIcon from "@iconify-icons/line-md/calendar";
 import accountIcon from "@iconify-icons/line-md/account";
 import alertIcon from "@iconify-icons/line-md/alert";
@@ -25,13 +25,14 @@ import { blobToArrayBuffer, loadImage, readFileAsArrayBuffer } from "@/utils/bro
 import { DragZoneCore } from "@/domains/ui/drag-zone";
 import { DropArea } from "@/components/ui/drop-zone";
 import { FileThumb } from "@/components/FileThumb";
+import { ExampleIconSets } from "@/constants";
 
 function HomeIndexPageCore(props: ViewComponentProps) {
   const { app } = props;
 
   let _icons: ReturnType<typeof $$canvas.buildPreviewIcons> = [];
   let _code = "";
-  let _tool = "text";
+  let _tool = "icon";
   let _font: opentype.Font | null = null;
 
   function preview() {
@@ -186,7 +187,20 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       })();
     }
   }
-
+  function loadSVGContent(content: string) {
+    const result = $$canvas.buildBezierPathsFromPathString(content);
+    if (result === null) {
+      app.tip({
+        text: ["不是合法的 SVG 内容"],
+      });
+      return;
+    }
+    const { dimensions, gradients, paths } = result;
+    $$canvas.saveGradients(gradients);
+    $$canvas.appendObjects(paths, { transform: true, dimensions });
+    draw();
+    preview();
+  }
   async function handleFile(file: File) {
     const filename = file.name;
     const r = await readFileAsArrayBuffer(file);
@@ -240,18 +254,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
         return;
       }
       const content = $input.value;
-      const result = $$canvas.buildBezierPathsFromPathString(content);
-      if (result === null) {
-        app.tip({
-          text: ["不是合法的 SVG 内容"],
-        });
-        return;
-      }
-      const { dimensions, gradients, paths } = result;
-      $$canvas.saveGradients(gradients);
-      $$canvas.appendObjects(paths, { transform: true, dimensions });
-      draw();
-      preview();
+      loadSVGContent(content);
       $dialog.hide();
     },
   });
@@ -455,6 +458,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       _tool = t;
       bus.emit(Events.Change, { ...state });
     },
+    loadSVGContent,
     onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
       return bus.on(Events.Change, handler);
     },
@@ -470,33 +474,9 @@ export const HomeIndexPage: ViewComponent = (props) => {
   const [state, setState] = createSignal($$canvas.state);
   const [page, setPage] = createSignal($page.state);
   const [layers, setLayers] = createSignal($$canvas.layerList);
-  const [icons, setIcons] = createSignal([<TvIcon class="w-full h-full" />, <SofaIcon class="w-full h-full" />]);
 
   // Disable cache
   disableCache("all");
-
-  // Add few custom icons
-  addIcon("demo", calendarIcon);
-  addIcon("experiment2", {
-    width: 16,
-    height: 16,
-    body: '<g fill="none" stroke-linecap="round" stroke-width="1" stroke="currentColor"><circle cx="8" cy="8" r="7.5" stroke-dasharray="48" stroke-dashoffset="48"><animate id="circle" attributeName="stroke-dashoffset" values="48;0" dur="0.5s" fill="freeze" /></circle><path d="M8 5v3" stroke-width="2" stroke-dasharray="5" stroke-dashoffset="5"><animate attributeName="stroke-dashoffset" values="5;0" dur="0.3s" begin="circle.end+0.1s" fill="freeze" /></path></g><circle cx="8" cy="11" r="1" fill="currentColor" opacity="0"><animate attributeName="opacity" values="0;1" dur="0.2s" begin="circle.end+0.5s" fill="freeze" /></circle>',
-  });
-
-  // Add mdi-light icons with custom prefix
-  addCollection({
-    prefix: "test",
-    icons: {
-      alert1: {
-        body: '<path d="M10.5 14c4.142 0 7.5 1.567 7.5 3.5V20H3v-2.5c0-1.933 3.358-3.5 7.5-3.5zm6.5 3.5c0-1.38-2.91-2.5-6.5-2.5S4 16.12 4 17.5V19h13v-1.5zM10.5 5a3.5 3.5 0 1 1 0 7a3.5 3.5 0 0 1 0-7zm0 1a2.5 2.5 0 1 0 0 5a2.5 2.5 0 0 0 0-5zM20 16v-1h1v1h-1zm0-3V7h1v6h-1z" fill="currentColor"/>',
-      },
-      link1: {
-        body: '<path d="M8 13v-1h7v1H8zm7.5-6a5.5 5.5 0 1 1 0 11H13v-1h2.5a4.5 4.5 0 1 0 0-9H13V7h2.5zm-8 11a5.5 5.5 0 1 1 0-11H10v1H7.5a4.5 4.5 0 1 0 0 9H10v1H7.5z" fill="currentColor"/>',
-      },
-    },
-    width: 24,
-    height: 24,
-  });
 
   $$canvas.onChange((v) => setState(v));
   $page.onChange((v) => setPage(v));
@@ -588,49 +568,21 @@ export const HomeIndexPage: ViewComponent = (props) => {
           style={{ "z-index": 9999 }}
         >
           <div class="h-full p-4 w-[360px] bg-white border rounded-md">
-            <section class="icon-24">
-              <h1>Usage (full module)</h1>
-              <div>
-                Icons referenced by name (as SVG, as SPAN):
-                <Icon icon="mdi:home" />
-                <Icon icon="mdi:home" mode="style" />
-              </div>
-              <div class="alert">
-                <Icon icon="mdi-light:alert" />
-                Important notice with alert icon!
-              </div>
-            </section>
-            <section class="icon-24">
-              <h1>Usage (offline mode: using preloaded icons)</h1>
-              <div>
-                Icons referenced by name (as SVG, as SPAN): <Icon icon="demo" />
-                <Icon icon="demo" mode="style" />
-              </div>
-              <div>
-                Icons referenced by object (as SVG, as SPAN): <Icon icon={accountIcon} />
-                <Icon icon={accountIcon} mode="style" />
-              </div>
-              <div>
-                2 icons imported from icon set: <Icon icon="test:alert1" />
-                <Icon icon="test:link1" mode="style" />
-              </div>
-              <div class="alert">
-                <Icon icon={alertIcon} mode="mask" />
-                Important notice with alert icon!
-              </div>
-            </section>
-            <section class="inline-demo">
-              <h1>Inline demo</h1>
-              <div>
-                Block icon (behaving like image):
-                <Icon icon="experiment2" />
-                <Icon icon="experiment2" inline={true} style="vertical-align: 0" />
-              </div>
-              <div>
-                Inline icon (behaving line text / icon font):
-                <Icon icon="experiment2" inline={true} />
-                <Icon icon="experiment2" style={{ "vertical-align": "-0.125em" }} />
-              </div>
+            <section class="grid grid-cols-6 text-gray-600">
+              <For each={ExampleIconSets}>
+                {(icon) => {
+                  return (
+                    <div
+                      class="p-2 cursor-pointer"
+                      innerHTML={icon.svg}
+                      title={icon.name}
+                      onClick={() => {
+                        $page.loadSVGContent(icon.svg);
+                      }}
+                    ></div>
+                  );
+                }}
+              </For>
             </section>
           </div>
         </div>
@@ -691,7 +643,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
           <div class="w-full h-[1px] my-4 bg-gray-200"></div>
           <div class="px-4">
             <div>预览</div>
-            <div class="flex space-x-4">
+            <div class="flex space-x-4 mt-4">
               <For each={page().icons}>
                 {(svg) => {
                   return (
