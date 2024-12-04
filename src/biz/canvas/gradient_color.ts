@@ -50,6 +50,20 @@ export function GradientColor(props: GradientColorProps) {
     setSteps(stops: { color: string; offset: number }[]) {
       _steps = stops;
     },
+    setPointsAndColors(
+      points: { x1: number; y1: number; x2: number; y2: number },
+      colors: { color: string; offset: number }[]
+    ) {
+      _d1 = {
+        x: points.x1,
+        y: points.y1,
+      };
+      _d2 = {
+        x: points.x2,
+        y: points.y2,
+      };
+      _steps = colors;
+    },
     getStyle() {},
 
     onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {

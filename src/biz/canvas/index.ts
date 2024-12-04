@@ -54,7 +54,7 @@ export function Canvas(props: CanvasProps) {
             y: grid.y + grid.height,
           })
         );
-        _$gradient.setColorStartAndEnd({ color: "#ffffff", v: 0 }, { color: "#000000", v: 1 });
+        _$gradient.setColorStartAndEnd({ color: "#ffffff", v: 0 }, { color: "#000000", v: 0.9 });
         const $gradientColor = _$gradient.getColor("background");
         _gradients.push($gradientColor);
         if (_$shape) {
@@ -98,20 +98,19 @@ export function Canvas(props: CanvasProps) {
         });
         const line = Line({});
         line.setFill({
-          color: "#cccccc",
+          color: "url(#background)",
           opacity: 100,
           visible: true,
         });
         _$shape = line;
         line.append($path);
         _lines.push(line);
-        if (_gradients[0]) {
-          if (_$shape) {
-            console.log("[BIZ]canvas/index - before set Shape GradientColor");
-            _$shape.setFill({ color: "url(#background)", visible: true, opacity: 1 });
-            // _$shape.setFill({ color: layer.getGradient(_gradients[0]), visible: true, opacity: 1 });
-          }
-        }
+        // if (_gradients[0]) {
+        //   if (_$shape) {
+        //     console.log("[BIZ]canvas/index - before set Shape GradientColor");
+        //     _$shape.setFill({ color: "url(#background)", visible: true, opacity: 1 });
+        //   }
+        // }
         bus.emit(Events.Refresh);
       },
     }),
@@ -505,7 +504,8 @@ export function Canvas(props: CanvasProps) {
                 const [_, id] = state.fill.color.match(/url\(#([^)]{1,})\)/)!;
                 const gradient = _gradients.find((g) => g.id === id);
                 if (gradient) {
-                  $graph_layer.setFillStyle(gradient.getStyle());
+                  console.log("[BIZ]before $graph_layer.setFillStyle");
+                  $graph_layer.setFillStyle($graph_layer.getGradient(gradient));
                 }
               }
               $graph_layer.fill();
@@ -772,6 +772,15 @@ export function Canvas(props: CanvasProps) {
     $graph_layer.drawCircle($path.points[1], 4);
     $graph_layer.drawRectWithPoints({ points: _$gradient.d1!.points, background: _$gradient.d1!.color });
     $graph_layer.drawRectWithPoints({ points: _$gradient.d2!.points, background: _$gradient.d2!.color });
+  });
+  _$gradient.onChange(() => {
+    const $bg = _gradients[0];
+    if (!$bg) {
+      return;
+    }
+    $bg.setPointsAndColors(_$gradient.state.points, _$gradient.state.colors);
+    console.log("[BIZ]canvas/index - handle _$gradient.onChange");
+    bus.emit(Events.Refresh);
   });
 
   return ins;

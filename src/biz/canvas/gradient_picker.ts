@@ -484,6 +484,7 @@ export function GradientColorPicker(props: GradientColorPickerProps) {
         _d2.v = calcPercentAtLine(_start.pos, _end.pos, _d2.point.pos);
       }
       _active = true;
+      bus.emit(Events.Change, { ..._state });
     },
 
     onRefresh(handler: Handler<TheTypesOfEvents[Events.Refresh]>) {

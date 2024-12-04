@@ -509,7 +509,9 @@ export function connectLayer(
     const {
       size: { width, height },
     } = canvas;
-    const gradient = ctx.createLinearGradient(x1 * width, y1 * height, x2 * width, y2 * height);
+    // @todo SVG 转过来的，似乎 x1 y1 都是百分比，而不是绝对值
+    // const gradient = ctx.createLinearGradient(x1 * width, y1 * height, x2 * width, y2 * height);
+    const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
     for (let i = 0; i < stops.length; i += 1) {
       const config = stops[i];
       gradient.addColorStop(config.offset, config.color);
