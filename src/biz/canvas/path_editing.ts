@@ -501,13 +501,13 @@ export function PathEditing(props: PathEditingProps) {
           if (!_line) {
             // _cur_line.append(_cur_line_path);
             _line = Line({
-              stroke: {
-                width: 4,
-                color: "#ffffff",
-              },
-              // fill: {
-              //   color: "#111111",
+              // stroke: {
+              //   width: 4,
+              //   color: "#ffffff",
               // },
+              fill: {
+                color: "#111111",
+              },
             });
             _line.setEditing(true);
             bus.emit(Events.CreateLine, _line);

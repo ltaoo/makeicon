@@ -2,6 +2,9 @@ import { base, Handler } from "@/domains/base";
 import { Line } from "@/biz/line";
 import { toFixPoint } from "@/biz/bezier_point/utils";
 import { LinearGradientPayload } from "@/biz/svg/path-parser";
+import { BezierPoint } from "@/biz/bezier_point";
+import { LinePath } from "@/biz/path";
+import { Point, PointType } from "@/biz/point";
 
 import { CanvasLayer } from "./layer";
 import { Position } from "./types";
@@ -12,6 +15,8 @@ import { CanvasPointer } from "./mouse";
 import { CanvasModeManage, StatusKeyType, StatusKeys } from "./mode";
 import { PathEditing } from "./path_editing";
 import { CanvasObject } from "./object";
+import { GradientColorPicker } from "./gradient_picker";
+import { GradientColor } from "./gradient_color";
 
 const debug = false;
 
@@ -20,6 +25,7 @@ export function Canvas(props: CanvasProps) {
   let _mounted = false;
   const _layers: {
     range: CanvasLayer;
+    tool: CanvasLayer;
     grid: CanvasLayer;
     path: CanvasLayer;
     graph: CanvasLayer;
@@ -28,8 +34,36 @@ export function Canvas(props: CanvasProps) {
   } = {
     // 绘制了选框
     range: CanvasLayer({
-      zIndex: 999,
+      zIndex: 1001,
       disabled: true,
+    }),
+    tool: CanvasLayer({
+      zIndex: 1000,
+      disabled: true,
+      onMounted(layer) {
+        const grid = _grid;
+        _$gradient.setStartAndEnd(
+          Point({
+            type: PointType.Anchor,
+            x: grid.x,
+            y: grid.y,
+          }),
+          Point({
+            type: PointType.Anchor,
+            x: grid.x + grid.width,
+            y: grid.y + grid.height,
+          })
+        );
+        _$gradient.setColorStartAndEnd({ color: "#ffffff", v: 0 }, { color: "#000000", v: 1 });
+        const $gradientColor = _$gradient.getColor("background");
+        _gradients.push($gradientColor);
+        if (_$shape) {
+          console.log("[BIZ]canvas/index - before set Shape GradientColor");
+          // layer.getGradient($gradientColor)
+          _$shape.setFill({ color: "url(#background)", visible: true, opacity: 1 });
+        }
+        _$gradient.refresh();
+      },
     }),
     // 绘制了网格线
     grid: CanvasLayer({
@@ -50,7 +84,7 @@ export function Canvas(props: CanvasProps) {
       onMounted(layer) {
         const $background = layer;
         const grid = _grid;
-        const path = $background.drawRoundedRect({
+        const $path = $background.drawRoundedRect({
           x: grid.x,
           y: grid.y,
           rx: 60,
@@ -68,13 +102,16 @@ export function Canvas(props: CanvasProps) {
           opacity: 100,
           visible: true,
         });
-        line.setStroke({
-          color: "#cccccc",
-          opacity: 100,
-          visible: false,
-        });
-        line.append(path);
+        _$shape = line;
+        line.append($path);
         _lines.push(line);
+        if (_gradients[0]) {
+          if (_$shape) {
+            console.log("[BIZ]canvas/index - before set Shape GradientColor");
+            _$shape.setFill({ color: "url(#background)", visible: true, opacity: 1 });
+            // _$shape.setFill({ color: layer.getGradient(_gradients[0]), visible: true, opacity: 1 });
+          }
+        }
         bus.emit(Events.Refresh);
       },
     }),
@@ -82,22 +119,7 @@ export function Canvas(props: CanvasProps) {
       zIndex: 0,
       async onMounted(layer) {
         const grid = _grid;
-        const $background = _layers.background;
         const $frame = _layers.frame;
-        // layer.drawTransparentBackground({
-        //   x: grid.x,
-        //   y: grid.y,
-        //   width: grid.width,
-        //   height: grid.height,
-        //   unit: 18,
-        // });
-        // layer.drawBackground({
-        //   x: start.x,
-        //   y: start.y,
-        //   width: grid.width,
-        //   height: grid.height,
-        //   colors: [{ step: 0, color: "white" }],
-        // });
         const unit = 16;
         $frame.drawTransparentBackground({
           x: grid.x,
@@ -125,7 +147,8 @@ export function Canvas(props: CanvasProps) {
     lineWidth: 0.5,
     color: "#cccccc",
   };
-  let _gradients: LinearGradientPayload[] = [];
+  let _$shape: Line | null = null;
+  let _gradients: GradientColor[] = [];
   /** 画布上的图形 */
   let _objects: CanvasObject[] = [];
   /** 当前选择的图形 */
@@ -186,8 +209,11 @@ export function Canvas(props: CanvasProps) {
     },
     get layerList() {
       return Object.keys(_layers).map((name) => {
-        // @ts-ignore
-        return _layers[name];
+        return {
+          name,
+          // @ts-ignore
+          layer: _layers[name],
+        };
       });
     },
     get $selection() {
@@ -337,11 +363,19 @@ export function Canvas(props: CanvasProps) {
     //   return [nextRect, lines];
     // },
     saveGradients(gradients: LinearGradientPayload[]) {
-      console.log("[BIZ]canvas/index - saveGradient", _gradients);
-      _gradients = gradients;
+      // console.log("[BIZ]canvas/index - saveGradient", _gradients);
+      _gradients = gradients.map((g) => {
+        const { id, x1, x2, y1, y2, stops } = g;
+        const c = GradientColor({
+          id,
+        });
+        c.setD1AndD2({ x: x1, y: y1 }, { x: x2, y: y2 });
+        c.setSteps(stops);
+        return c;
+      });
     },
     getGradient(id: string) {
-      console.log("[BIZ]canvas/index - getGradient", id, _gradients);
+      // console.log("[BIZ]canvas/index - getGradient", id, _gradients);
       return _gradients.find((g) => g.id === id);
     },
     appendObjects(
@@ -396,6 +430,146 @@ export function Canvas(props: CanvasProps) {
       }
       return false;
     },
+    draw() {
+      const $$canvas = this;
+      // console.log("[PAGE]index/index - draw", $$canvas.paths.length);
+      const $graph_layer = $$canvas.layer;
+      const $pen_layer = $$canvas.layers.path;
+      $graph_layer.clear();
+      $pen_layer.clear();
+      $graph_layer.emptyLogs();
+      // console.log("[PAGE]before render $$canvas.paths", $$canvas.paths);
+      for (let i = 0; i < $$canvas.paths.length; i += 1) {
+        (() => {
+          const $$path = $$canvas.paths[i];
+          const state = $$path.state;
+          // console.log("before $$path.state.stroke.enabled", state.stroke.enabled);
+          // console.log("[PAGE]home/index render $$canvas.paths", $$path.paths);
+          for (let j = 0; j < $$path.paths.length; j += 1) {
+            const $sub_path = $$path.paths[j];
+            const commands = $sub_path.buildCommands();
+            $graph_layer.save();
+            for (let i = 0; i < commands.length; i += 1) {
+              const prev = commands[i - 1];
+              const command = commands[i];
+              const next_command = commands[i + 1];
+              // console.log("[PAGE]command", command.c, command.a);
+              if (command.c === "M") {
+                const [x, y] = command.a;
+                // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
+                $graph_layer.beginPath();
+                $graph_layer.moveTo(x, y);
+                $pen_layer.beginPath();
+                $pen_layer.moveTo(x, y);
+              }
+              if (command.c === "A") {
+                // console.log('A', command);
+                const [c1x, c1y, radius, angle1, angle2, counterclockwise] = command.a;
+                // console.log("A 弧线", c1x, c1y, radius, angle1, angle2, counterclockwise);
+                $graph_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
+                $pen_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
+                // if (command.end) {
+                //   ctx.moveTo(command.end.x, command.end.y);
+                // }
+              }
+              if (command.c === "C") {
+                const [c1x, c1y, c2x, c2y, ex, ey] = command.a;
+                $graph_layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+                $pen_layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+                // if (command.p) {
+                //   ctx.moveTo(command.p.x, command.p.y);
+                // }
+              }
+              if (command.c === "Q") {
+                const [c1x, c1y, ex, ey] = command.a;
+                $graph_layer.quadraticCurveTo(c1x, c1y, ex, ey);
+                $pen_layer.quadraticCurveTo(c1x, c1y, ex, ey);
+              }
+              if (command.c === "L") {
+                const [x, y] = command.a;
+                $graph_layer.lineTo(x, y);
+                $pen_layer.lineTo(x, y);
+              }
+              if (command.c === "Z") {
+                $graph_layer.closePath();
+                $pen_layer.closePath();
+              }
+            }
+            if (state.fill.enabled && $sub_path.closed) {
+              if ($sub_path.composite === "destination-out") {
+                $graph_layer.setGlobalCompositeOperation($sub_path.composite);
+              }
+              $graph_layer.setFillStyle(state.fill.color);
+              // @todo 统一改成 Color 实例？GradientColor 是 Color 的一种？
+              if (typeof state.fill.color === "string" && state.fill.color.match(/url\(([^)]{1,})\)/)) {
+                const [_, id] = state.fill.color.match(/url\(#([^)]{1,})\)/)!;
+                const gradient = _gradients.find((g) => g.id === id);
+                if (gradient) {
+                  $graph_layer.setFillStyle(gradient.getStyle());
+                }
+              }
+              $graph_layer.fill();
+            }
+            if (state.stroke.enabled) {
+              $graph_layer.setStrokeStyle(state.stroke.color);
+              $graph_layer.setLineWidth($$canvas.grid.unit * state.stroke.width);
+              $graph_layer.setLineCap(state.stroke.start_cap);
+              $graph_layer.setLineJoin(state.stroke.join);
+              $graph_layer.stroke();
+            }
+            $graph_layer.restore();
+            $graph_layer.stopLog();
+            // 绘制锚点
+            if ($$path.editing) {
+              if ($$canvas.state.cursor) {
+                // const $layer = $$canvas.layers[1];
+                $pen_layer.save();
+                $pen_layer.setStrokeStyle("lightgrey");
+                $pen_layer.setLineWidth(1);
+                $pen_layer.stroke();
+                for (let k = 0; k < $sub_path.skeleton.length; k += 1) {
+                  const point = $sub_path.skeleton[k];
+                  // console.log("[PAGE]home/index", i, point.start ? "start" : "", point.from, point.to, point.virtual);
+                  (() => {
+                    if (point.hidden) {
+                      return;
+                    }
+                    $pen_layer.beginPath();
+                    $pen_layer.setLineWidth(0.5);
+                    $pen_layer.setStrokeStyle("lightgrey");
+                    if (point.from) {
+                      $pen_layer.drawLine(point, point.from);
+                    }
+                    if (point.to && !point.virtual) {
+                      $pen_layer.drawLine(point, point.to);
+                    }
+                    $pen_layer.setStrokeStyle("black");
+                    const radius = 3;
+                    $pen_layer.drawCircle(point.point, radius);
+                    if (point.from) {
+                      $pen_layer.drawDiamondAtLineEnd(point, point.from);
+                    }
+                    if (point.to && !point.virtual) {
+                      $pen_layer.drawDiamondAtLineEnd(point, point.to);
+                    }
+                  })();
+                }
+                $pen_layer.restore();
+              }
+            }
+          }
+          if ($$path.selected) {
+            const box = $$path.box;
+            $pen_layer.drawRect(box);
+            const edges = $$path.buildEdgesOfBox();
+            for (let i = 0; i < edges.length; i += 1) {
+              const edge = edges[i];
+              $pen_layer.drawRect(edge, { background: "#ffffff" });
+            }
+          }
+        })();
+      }
+    },
     buildBezierPathsFromOpentype(...args: Parameters<typeof _$converter.buildBezierPathsFromOpentype>) {
       return _$converter.buildBezierPathsFromOpentype(...args);
     },
@@ -430,6 +604,7 @@ export function Canvas(props: CanvasProps) {
       // const pos = toFixPoint(event);
       // _$selection.setPressing(true);
       _$pointer.handleMouseDown(pos);
+      _$gradient.handleMouseDown(pos);
       if (_$mode.value === "default.select") {
         // 检查是否点中了画布上的物体，如果是，就开始移动
         const clicked = (() => {
@@ -464,6 +639,9 @@ export function Canvas(props: CanvasProps) {
           _cur_object.unselect();
           _cur_object = null;
         }
+        if (_$gradient.active) {
+          return;
+        }
         _$selection.startRangeSelect(pos);
       }
       if (_$mode.is("path_editing")) {
@@ -474,6 +652,7 @@ export function Canvas(props: CanvasProps) {
       // const pos = toFixPoint(event);
       // console.log("[BIZ]canvas/index - handleMouseMove", _$mode.value, _cur_object);
       _$pointer.handleMouseMove(pos);
+      _$gradient.handleMousemove(pos);
       if (_$mode.value === "default.select") {
         if (_cur_object) {
           if (_$pointer.pressing && _cursor === "right-bottom-edge") {
@@ -485,6 +664,9 @@ export function Canvas(props: CanvasProps) {
             return;
           }
           _cur_object.handleMouseMove(pos);
+          return;
+        }
+        if (_$gradient.active) {
           return;
         }
         _$selection.rangeSelect(pos);
@@ -514,6 +696,7 @@ export function Canvas(props: CanvasProps) {
         }
       })();
       _$pointer.handleMouseUp(pos);
+      _$gradient.handleMouseUp(pos);
     },
     onSelect(handler: Handler<TheTypesOfEvents[Events.Select]>) {
       return bus.on(Events.Select, handler);
@@ -533,6 +716,7 @@ export function Canvas(props: CanvasProps) {
   const _$pointer = CanvasPointer({ canvas: ins, mode: _$mode });
   const _$selection = CanvasRangeSelection({ pointer: _$pointer });
   const _$path_editing = PathEditing({ canvas: ins, pointer: _$pointer, mode: _$mode });
+  const _$gradient = GradientColorPicker({ pointer: _$pointer });
   _$pointer.onDoubleClick((pos) => {
     const matched = (() => {
       for (let i = 0; i < _lines.length; i += 1) {
@@ -568,6 +752,26 @@ export function Canvas(props: CanvasProps) {
   });
   _$path_editing.onRefresh(() => {
     bus.emit(Events.Refresh);
+  });
+  _$gradient.onCursorChange((v) => {
+    if (_cursor === v) {
+      return;
+    }
+    _cursor = v;
+    bus.emit(Events.Change, { ..._state });
+  });
+  _$gradient.onRefresh(() => {
+    const $path = _$gradient.$path;
+    if ($path === null) {
+      return;
+    }
+    const $graph_layer = _layers.tool;
+    $graph_layer.clear();
+    $graph_layer.drawLine($path.points[0], $path.points[1]);
+    $graph_layer.drawCircle($path.points[0], 4);
+    $graph_layer.drawCircle($path.points[1], 4);
+    $graph_layer.drawRectWithPoints({ points: _$gradient.d1!.points, background: _$gradient.d1!.color });
+    $graph_layer.drawRectWithPoints({ points: _$gradient.d2!.points, background: _$gradient.d2!.color });
   });
 
   return ins;

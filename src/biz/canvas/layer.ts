@@ -54,6 +54,20 @@ export function CanvasLayer(props: CanvasLayerProps) {
     drawRect(rect: { x: number; y: number; x1: number; y1: number }, extra: Partial<{ background: string }> = {}) {
       console.log("请实现 drawRect 方法");
     },
+    drawRectWithPoints(opt: { points: { x: number; y: number }[]; background?: string }) {
+      console.log("请实现 drawRectWithPoints 方法");
+    },
+    /**
+     * @deprecated
+     */
+    drawRectWithCenter(opt: {
+      center: { x: number; y: number };
+      size: { width: number; height: number };
+      norm: { x: number; y: number };
+      background?: string;
+    }) {
+      console.log("请实现 drawRectWithCenter 方法");
+    },
     drawLabel(point: { x: number; y: number }) {
       console.log("请实现 drawLabel 方法");
     },
@@ -172,12 +186,16 @@ export function CanvasLayer(props: CanvasLayerProps) {
     restore() {
       console.log("请实现 restore 方法");
     },
-    getGradient(payload: LinearGradientPayload): any {
+    getGradient(payload: any): any {
       console.log("请实现 getGradient 方法");
       return null;
     },
     getCanvas(): unknown {
       console.log("请实现 getCanvas 方法");
+      return null;
+    },
+    getCtx(): unknown {
+      console.log("请实现 getCtx 方法");
       return null;
     },
     getBlob(type: string, quality?: string): Promise<Result<Blob>> {

@@ -6,6 +6,8 @@ import { Result } from "@/domains/result";
 import { Canvas } from "./index";
 import { CanvasLayer } from "./layer";
 import { drawFigmaSmoothCorners } from "./corner";
+import { calcNorm } from "./utils";
+import { GradientColor } from "./gradient_color";
 
 export function connect(store: Canvas, $canvas: HTMLDivElement) {
   if (store.mounted) {
@@ -58,6 +60,7 @@ export function connectLayer(
     return;
   }
   layer.drawLine = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
+    ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.closePath();
@@ -109,6 +112,67 @@ export function connectLayer(
     ctx.stroke();
     if (extra.background) {
       ctx.fillStyle = extra.background;
+      ctx.fill();
+    }
+  };
+  layer.drawRectWithPoints = (opt: { points: { x: number; y: number }[]; background?: any }) => {
+    const { points } = opt;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) {
+      const point = points[i];
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = "#ccc";
+    ctx.stroke();
+    if (opt.background) {
+      ctx.fillStyle = opt.background;
+      ctx.fill();
+    }
+  };
+  layer.drawRectWithCenter = (opt: {
+    center: { x: number; y: number };
+    size: { width: number; height: number };
+    norm: { x: number; y: number };
+    background?: string;
+  }) => {
+    const { center, size } = opt;
+    const { x: normX, y: normY } = opt.norm;
+    const unitDirY = -normX;
+    const unitDirX = normY;
+    const halfWidth = size.width / 2;
+    const halfHeight = size.height / 2;
+    // 计算矩形四个顶点
+    const topLeft = {
+      x: center.x + normX * halfWidth - unitDirX * halfHeight,
+      y: center.y + normY * halfWidth - unitDirY * halfHeight,
+    };
+    const topRight = {
+      x: center.x - normX * halfWidth - unitDirX * halfHeight,
+      y: center.y - normY * halfWidth - unitDirY * halfHeight,
+    };
+    const bottomLeft = {
+      x: center.x + normX * halfWidth + unitDirX * halfHeight,
+      y: center.y + normY * halfWidth + unitDirY * halfHeight,
+    };
+    const bottomRight = {
+      x: center.x - normX * halfWidth + unitDirX * halfHeight,
+      y: center.y - normY * halfWidth + unitDirY * halfHeight,
+    };
+    ctx.fillStyle = "blue";
+    ctx.beginPath();
+    ctx.moveTo(topLeft.x, topLeft.y);
+    ctx.lineTo(topRight.x, topRight.y);
+    ctx.lineTo(bottomRight.x, bottomRight.y);
+    ctx.lineTo(bottomLeft.x, bottomLeft.y);
+    ctx.closePath();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "blue";
+    ctx.stroke();
+
+    if (opt.background) {
+      ctx.fillStyle = opt.background;
       ctx.fill();
     }
   };
@@ -436,10 +500,11 @@ export function connectLayer(
     ctx.restore();
   };
   const existingGradients: Record<string, any> = {};
-  layer.getGradient = (payload: LinearGradientPayload) => {
+  layer.getGradient = (payload: GradientColor) => {
     const { id, x1, y1, x2, y2, stops } = payload;
-    if (existingGradients[id]) {
-      return existingGradients[id];
+    const unique = [id, x1, y1, x2, y2, stops].join("");
+    if (existingGradients[unique]) {
+      return existingGradients[unique];
     }
     const {
       size: { width, height },
@@ -449,11 +514,14 @@ export function connectLayer(
       const config = stops[i];
       gradient.addColorStop(config.offset, config.color);
     }
-    existingGradients[id] = gradient;
-    return existingGradients[id];
+    existingGradients[unique] = gradient;
+    return existingGradients[unique];
   };
   layer.getCanvas = () => {
     return $canvas;
+  };
+  layer.getCtx = () => {
+    return ctx;
   };
   layer.getBlob = (type: string, quality?: string) => {
     return new Promise((resolve) => {
@@ -475,3 +543,5 @@ export function connectLayer(
 
   layer.setMounted();
 }
+
+export function connectGradientColor() {}

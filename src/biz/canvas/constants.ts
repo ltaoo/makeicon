@@ -14,7 +14,8 @@ export type CursorType =
   | "left-top-rotate"
   | "right-top-rotate"
   | "left-bottom-rotate"
-  | "right-bottom-rotate";
+  | "right-bottom-rotate"
+  | "move";
 
 export const AUTO_CONTROLLER_POINT_LENGTH_RATIO = 0.42;
 

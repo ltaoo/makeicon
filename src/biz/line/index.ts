@@ -157,7 +157,7 @@ export function Line(props: PathProps) {
       return _box;
     },
     obj: _$obj,
-    setFill(values: { color: string; opacity: number; visible: boolean }) {
+    setFill(values: { color: any; opacity: number; visible: boolean }) {
       const { color, opacity, visible } = values;
       _fill = {
         ..._fill,

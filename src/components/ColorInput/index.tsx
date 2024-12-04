@@ -52,8 +52,8 @@ export function ColorInput(props: { store: ColorInputCore }) {
             store.toggleVisible();
           }}
         >
-          <Show when={state().visible} fallback={<Eye class="w-4 h-4" />}>
-            <EyeOff class="w-4 h-4" />
+          <Show when={state().visible} fallback={<EyeOff class="w-4 h-4" />}>
+            <Eye class="w-4 h-4" />
           </Show>
         </div>
         <div

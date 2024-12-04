@@ -1451,3 +1451,73 @@ export function buildPath(
     }
   }
 }
+
+export function calcNorm(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  const ux = -dy / length;
+  const uy = dx / length;
+  const x = -uy;
+  const y = ux;
+  return {
+    length,
+    /** 法向量 */
+    x,
+    y,
+    dx,
+    dy,
+    /** 切向量 */
+    ux,
+    uy,
+  };
+}
+
+/** 获取切向量 */
+export function calculateTangent(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  return { x: dx / length, y: dy / length };
+}
+
+export function calcPercentAtLine(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  p3: { x: number; y: number }
+) {
+  const { x: x1, y: y1 } = p1;
+  const { x: x2, y: y2 } = p2;
+  const { x: x3, y: y3 } = p3;
+  // 计算 p1 到 p2 的距离 (线段长度)
+  const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  // 计算 p1 到 p3 的距离
+  const distanceP1ToP3 = Math.sqrt((x3 - x1) ** 2 + (y3 - y1) ** 2);
+  // 计算百分比
+  const percentage = distanceP1ToP3 / length;
+  return percentage;
+}
+
+export function calcMinAndMaxPoint(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  const range = {
+    min: { x: p1.x, y: p1.y },
+    max: { x: p2.x, y: p2.y },
+  };
+  if (p1.x < p2.x) {
+    range.min.x = p1.x;
+    range.max.x = p2.x;
+  }
+  if (p1.y < p2.y) {
+    range.min.y = p1.y;
+    range.max.y = p2.y;
+  }
+  if (p2.x < p1.x) {
+    range.min.x = p2.x;
+    range.max.x = p1.x;
+  }
+  if (p2.y < p1.y) {
+    range.min.y = p2.y;
+    range.max.y = p1.y;
+  }
+  return range;
+}

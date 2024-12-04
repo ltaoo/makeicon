@@ -7,10 +7,6 @@ import { Copy, Image, PiIcon, Plus, Sofa, SofaIcon, Text, TvIcon } from "lucide-
 import opentype from "opentype.js";
 import { optimize } from "svgo";
 import { saveAs } from "file-saver";
-import { Icon, disableCache, getIcon, listIcons } from "@iconify-icon/solid";
-import calendarIcon from "@iconify-icons/line-md/calendar";
-import accountIcon from "@iconify-icons/line-md/account";
-import alertIcon from "@iconify-icons/line-md/alert";
 
 import { ViewComponent, ViewComponentProps } from "@/store/types";
 import { Button, Dialog, Input, Textarea } from "@/components/ui";
@@ -18,14 +14,13 @@ import { ButtonCore, DialogCore, InputCore } from "@/domains/ui";
 import { connect, connectLayer } from "@/biz/canvas/connect.web";
 import { Canvas } from "@/biz/canvas";
 import { ColorInput } from "@/components/ColorInput";
-import { Result } from "@/domains/result";
 import { ColorInputCore } from "@/biz/color_input";
 import { base, Handler } from "@/domains/base";
 import { blobToArrayBuffer, loadImage, readFileAsArrayBuffer } from "@/utils/browser";
 import { DragZoneCore } from "@/domains/ui/drag-zone";
 import { DropArea } from "@/components/ui/drop-zone";
 import { FileThumb } from "@/components/FileThumb";
-import { ExampleIconSets } from "@/constants";
+import { ExampleIconSets } from "@/constants/index";
 
 function HomeIndexPageCore(props: ViewComponentProps) {
   const { app } = props;
@@ -38,155 +33,12 @@ function HomeIndexPageCore(props: ViewComponentProps) {
   function preview() {
     const result = $$canvas.buildPreviewIcons();
     if (result.length === 0) {
-      app.tip({
-        text: ["没有内容"],
-      });
       return;
     }
     _icons = result;
     bus.emit(Events.Change, { ...state });
   }
 
-  function draw() {
-    // console.log("[PAGE]index/index - draw", $$canvas.paths.length);
-    const $graph_layer = $$canvas.layer;
-    const $pen_layer = $$canvas.layers.path;
-    $graph_layer.clear();
-    $pen_layer.clear();
-    $graph_layer.emptyLogs();
-    // console.log("[PAGE]before render $$canvas.paths", $$canvas.paths);
-    for (let i = 0; i < $$canvas.paths.length; i += 1) {
-      (() => {
-        const $$prev_path = $$canvas.paths[i - 1];
-        const $$path = $$canvas.paths[i];
-        const state = $$path.state;
-        // console.log("before $$path.state.stroke.enabled", state.stroke.enabled);
-        // console.log("[PAGE]home/index render $$canvas.paths", $$path.paths);
-        for (let j = 0; j < $$path.paths.length; j += 1) {
-          const $sub_path = $$path.paths[j];
-          const commands = $sub_path.buildCommands();
-          $graph_layer.save();
-          for (let i = 0; i < commands.length; i += 1) {
-            const prev = commands[i - 1];
-            const command = commands[i];
-            const next_command = commands[i + 1];
-            // console.log("[PAGE]command", command.c, command.a);
-            if (command.c === "M") {
-              const [x, y] = command.a;
-              // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
-              $graph_layer.beginPath();
-              $graph_layer.moveTo(x, y);
-              $pen_layer.beginPath();
-              $pen_layer.moveTo(x, y);
-            }
-            if (command.c === "A") {
-              // console.log('A', command);
-              const [c1x, c1y, radius, angle1, angle2, counterclockwise] = command.a;
-              // console.log("A 弧线", c1x, c1y, radius, angle1, angle2, counterclockwise);
-              $graph_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
-              $pen_layer.arc(c1x, c1y, radius, angle1, angle2, Boolean(counterclockwise));
-              // if (command.end) {
-              //   ctx.moveTo(command.end.x, command.end.y);
-              // }
-            }
-            if (command.c === "C") {
-              const [c1x, c1y, c2x, c2y, ex, ey] = command.a;
-              $graph_layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
-              $pen_layer.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
-              // if (command.p) {
-              //   ctx.moveTo(command.p.x, command.p.y);
-              // }
-            }
-            if (command.c === "Q") {
-              const [c1x, c1y, ex, ey] = command.a;
-              $graph_layer.quadraticCurveTo(c1x, c1y, ex, ey);
-              $pen_layer.quadraticCurveTo(c1x, c1y, ex, ey);
-            }
-            if (command.c === "L") {
-              const [x, y] = command.a;
-              $graph_layer.lineTo(x, y);
-              $pen_layer.lineTo(x, y);
-            }
-            if (command.c === "Z") {
-              $graph_layer.closePath();
-              $pen_layer.closePath();
-            }
-          }
-          if (state.fill.enabled && $sub_path.closed) {
-            if ($sub_path.composite === "destination-out") {
-              $graph_layer.setGlobalCompositeOperation($sub_path.composite);
-            }
-            $graph_layer.setFillStyle(state.fill.color);
-            if (state.fill.color.match(/url\(([^)]{1,})\)/)) {
-              const [_, id] = state.fill.color.match(/url\(#([^)]{1,})\)/)!;
-              const payload = $$canvas.getGradient(id);
-              if (payload) {
-                const gradient = $graph_layer.getGradient(payload) as CanvasGradient;
-                $graph_layer.setFillStyle(gradient);
-              }
-            }
-            $graph_layer.fill();
-          }
-          if (state.stroke.enabled) {
-            $graph_layer.setStrokeStyle(state.stroke.color);
-            $graph_layer.setLineWidth($$canvas.grid.unit * state.stroke.width);
-            $graph_layer.setLineCap(state.stroke.start_cap);
-            $graph_layer.setLineJoin(state.stroke.join);
-            $graph_layer.stroke();
-          }
-          $graph_layer.restore();
-          $graph_layer.stopLog();
-          // 绘制锚点
-          if ($$path.editing) {
-            if ($$canvas.state.cursor) {
-              // const $layer = $$canvas.layers[1];
-              $pen_layer.save();
-              $pen_layer.setStrokeStyle("lightgrey");
-              $pen_layer.setLineWidth(1);
-              $pen_layer.stroke();
-              for (let k = 0; k < $sub_path.skeleton.length; k += 1) {
-                const point = $sub_path.skeleton[k];
-                // console.log("[PAGE]home/index", i, point.start ? "start" : "", point.from, point.to, point.virtual);
-                (() => {
-                  if (point.hidden) {
-                    return;
-                  }
-                  $pen_layer.beginPath();
-                  $pen_layer.setLineWidth(0.5);
-                  $pen_layer.setStrokeStyle("lightgrey");
-                  if (point.from) {
-                    $pen_layer.drawLine(point, point.from);
-                  }
-                  if (point.to && !point.virtual) {
-                    $pen_layer.drawLine(point, point.to);
-                  }
-                  $pen_layer.setStrokeStyle("black");
-                  const radius = 3;
-                  $pen_layer.drawCircle(point.point, radius);
-                  if (point.from) {
-                    $pen_layer.drawDiamondAtLineEnd(point, point.from);
-                  }
-                  if (point.to && !point.virtual) {
-                    $pen_layer.drawDiamondAtLineEnd(point, point.to);
-                  }
-                })();
-              }
-              $pen_layer.restore();
-            }
-          }
-        }
-        if ($$path.selected) {
-          const box = $$path.box;
-          $pen_layer.drawRect(box);
-          const edges = $$path.buildEdgesOfBox();
-          for (let i = 0; i < edges.length; i += 1) {
-            const edge = edges[i];
-            $pen_layer.drawRect(edge, { background: "#ffffff" });
-          }
-        }
-      })();
-    }
-  }
   function loadSVGContent(content: string) {
     const result = $$canvas.buildBezierPathsFromPathString(content);
     if (result === null) {
@@ -198,7 +50,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
     const { dimensions, gradients, paths } = result;
     $$canvas.saveGradients(gradients);
     $$canvas.appendObjects(paths, { transform: true, dimensions });
-    draw();
+    $$canvas.draw();
     preview();
   }
   async function handleFile(file: File) {
@@ -232,18 +84,6 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       text: ["不支持的文件格式"],
     });
   }
-  const $upload = new InputCore({
-    defaultValue: {} as File[],
-    type: "file",
-    async onChange(v) {
-      const buffer = await v[0].arrayBuffer();
-      const font = opentype.parse(buffer);
-      const r = font.getPath("MakeIcon", 0, 0, 200);
-      const { paths } = $$canvas.buildBezierPathsFromOpentype(r.commands);
-      $$canvas.appendObjects(paths);
-      preview();
-    },
-  });
   const $$canvas = Canvas({});
   const $dialog = new DialogCore({
     onOk() {
@@ -274,7 +114,8 @@ function HomeIndexPageCore(props: ViewComponentProps) {
         return;
       }
       $$canvas.object.setFill(values);
-      draw();
+      $$canvas.draw();
+      preview();
     },
   });
   const $stroke = ColorInputCore({
@@ -284,7 +125,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
         return;
       }
       $$canvas.object.setStroke(values);
-      draw();
+      $$canvas.draw();
     },
   });
   const $drop = new DragZoneCore();
@@ -367,7 +208,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       const path = _font.getPath(value, x, y, fontSize);
       const { paths } = $$canvas.buildBezierPathsFromOpentype(path.commands);
       $$canvas.appendObjects(paths);
-      draw();
+      $$canvas.draw();
       preview();
     },
   });
@@ -383,7 +224,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
     $fill.setValue(line.fill);
   });
   $$canvas.onRefresh(() => {
-    draw();
+    $$canvas.draw();
     preview();
   });
   $drop.onChange(async (files) => {
@@ -440,7 +281,6 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       $stroke,
       $dialog,
       $codeDialog,
-      $upload,
       $svg,
       $downloadSVG,
       $downloadPNG,
@@ -481,9 +321,6 @@ export const HomeIndexPage: ViewComponent = (props) => {
   const [page, setPage] = createSignal($page.state);
   const [layers, setLayers] = createSignal($$canvas.layerList);
 
-  // Disable cache
-  disableCache("all");
-
   $$canvas.onChange((v) => setState(v));
   $page.onChange((v) => setPage(v));
 
@@ -501,7 +338,11 @@ export const HomeIndexPage: ViewComponent = (props) => {
           [cursorClassName()]: true,
         }}
         onAnimationEnd={(event) => {
+          if ($$canvas.mounted) {
+            return;
+          }
           const $rect = event.currentTarget;
+          // console.log("[PAGE]home/index connect canvas");
           connect($$canvas, $rect);
           $$canvas.setSize({
             width: $rect.clientWidth,
@@ -515,16 +356,18 @@ export const HomeIndexPage: ViewComponent = (props) => {
               <canvas
                 classList={{
                   "__a absolute inset-0 w-full h-full": true,
-                  "pointer-events-none": layer.disabled,
+                  "pointer-events-none": layer.layer.disabled,
                 }}
-                style={{ "z-index": layer.zIndex }}
+                style={{ "z-index": layer.layer.zIndex }}
+                data-name={layer.name}
                 onAnimationEnd={(event) => {
                   const $canvas = event.currentTarget as HTMLCanvasElement;
                   const ctx = $canvas.getContext("2d");
                   if (!ctx) {
                     return;
                   }
-                  connectLayer(layer, $$canvas, $canvas, ctx);
+                  // console.log("[PAGE]home/index connect layer", layer.name);
+                  connectLayer(layer.layer, $$canvas, $canvas, ctx);
                 }}
               />
             );

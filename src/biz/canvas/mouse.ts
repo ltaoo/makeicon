@@ -76,6 +76,12 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
     get dragging() {
       return _dragging;
     },
+    get instanceOfMoving() {
+      return {
+        x: _ox,
+        y: _oy,
+      };
+    },
     //     getCurPath() {
     //       return _cur_line_path;
     //     },

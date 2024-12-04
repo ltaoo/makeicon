@@ -110,42 +110,87 @@ export function Point(props: PointProps) {
       _y = y;
     },
     /** 移动到指定坐标 */
-    moveTo(pos: { x: number; y: number }, options: Partial<{ silence: boolean }> = {}) {
+    moveTo(pos: { x: number; y: number }, opt: Partial<{ normal: { x: number; y: number }; silence: boolean }> = {}) {
       const { x, y } = pos;
       const dx = x - _x;
       const dy = y - _y;
       _x = x;
       _y = y;
-      if (options.silence) {
+      if (opt.normal) {
+        // const dotProduct = dx * opt.normal.x + dy * opt.normal.y;
+        // _x = dotProduct * opt.normal.x;
+        // _y = dotProduct * opt.normal.y;
+        // console.log("[BIZ]point - moveTo", pos, dotProduct);
+        // _x = x * opt.normal.x;
+        // _y = y * opt.normal.y;
+      }
+      if (opt.silence) {
         return;
       }
       bus.emit(Events.Move, { x, y, dx, dy });
     },
     startMove(pos: { x: number; y: number }) {
+      _selected = true;
       _start = {
         x: _x,
         y: _y,
       };
     },
-    move(distance: { x: number; y: number }, options: Partial<{ directly: boolean; silence: boolean }> = {}) {
+    move(
+      distance: { x: number; y: number },
+      opt: Partial<{
+        min: { x: number; y: number };
+        max: { x: number; y: number };
+        normal: { x: number; y: number };
+        directly: boolean;
+        silence: boolean;
+      }> = {}
+    ) {
+      // console.log("[BIZ]point - move", _x, _y, distance, opt.normal);
       const { x, y } = distance;
       if (!_start) {
         return;
       }
-      if (options.directly) {
+      if (opt.directly) {
         _x += x;
         _y += y;
       } else {
-        _x = _start.x + x;
-        _y = _start.y + y;
+        if (opt.normal) {
+          const dotProduct = x * opt.normal.x + y * opt.normal.y;
+          _x = _start.x + dotProduct * opt.normal.x;
+          _y = _start.y + dotProduct * opt.normal.y;
+          // console.log("[BIZ]point - point", dotProduct, _x, _y);
+          // _x = _start.x + x * opt.normal.x;
+          // _y = _start.y + y * opt.normal.y;
+        } else {
+          _x = _start.x + x;
+          _y = _start.y + y;
+        }
       }
-      if (options.silence) {
+      if (opt.min) {
+        if (_x < opt.min.x) {
+          _x = opt.min.x;
+        }
+        if (_y < opt.min.y) {
+          _y = opt.min.y;
+        }
+      }
+      if (opt.max) {
+        if (_x > opt.max.x) {
+          _x = opt.max.x;
+        }
+        if (_y > opt.max.y) {
+          _y = opt.max.y;
+        }
+      }
+      if (opt.silence) {
         return;
       }
       bus.emit(Events.Move, { x: _x, y: _y, dx: x, dy: y });
     },
     finishMove(pos: { x: number; y: number }) {
       _start = null;
+      _selected = false;
     },
     onMove(handler: Handler<TheTypesOfEvents[Events.Move]>) {
       return bus.on(Events.Move, handler);
