@@ -5,7 +5,7 @@
  * 线条概念也不太对，应该是一个 group 概念 PathGroup。因为可以存在多条不连续的路径，说是「一条线」就很奇怪
  * @todo 增加基础的「物体」概念，移动、旋转、缩放等等，都组合「物体」来实现
  */
-import { base } from "@/domains/base";
+import { base, Handler } from "@/domains/base";
 import { LinePath } from "@/biz/path";
 import { boxToRectShape, createEmptyRectShape } from "@/biz/canvas/utils";
 import { CanvasObject } from "@/biz/canvas/object";
@@ -69,8 +69,9 @@ export function Line(props: PathProps) {
     _fill.color = fill.color;
   }
   let _composite = "source-over" as PathCompositeOperation;
-  // let _box = { x: 0, y: 0, x1: 0, y1: 0 };
+  let _box = { x: 0, y: 0, x1: 0, y1: 0 };
   // let _tmp_box: null | typeof _box = null;
+  let _scale = 1;
   let _editing = false;
   const _state = {
     get stroke() {
@@ -94,10 +95,12 @@ export function Line(props: PathProps) {
   // }
   enum Events {
     CursorChange,
+    Refresh,
     Change,
   }
   type TheTypesOfEvents = {
     [Events.CursorChange]: CursorType;
+    [Events.Refresh]: void;
     [Events.Change]: typeof _state;
   };
   const bus = base<TheTypesOfEvents>();
@@ -149,6 +152,9 @@ export function Line(props: PathProps) {
       // }
       // return _box;
       return _$obj.client;
+    },
+    get tmpBox() {
+      return _box;
     },
     obj: _$obj,
     setFill(values: { color: string; opacity: number; visible: boolean }) {
@@ -208,6 +214,48 @@ export function Line(props: PathProps) {
       this.refreshBox();
       return _$obj.checkInBox(pos);
     },
+    cacheBox() {
+      _box = { ...this.box };
+    },
+    clearBox() {
+      _box = { x: 0, y: 0, x1: 0, y1: 0 };
+    },
+    startScale() {
+      for (let i = 0; i < _paths.length; i += 1) {
+        const p = _paths[i];
+        p.startScale();
+      }
+    },
+    scale(v: number, opt: Partial<{ directly: boolean }> = {}) {
+      console.log("[BIZ]line/index - scale", v);
+      const box1 = this.box;
+      _scale = v;
+      for (let i = 0; i < _paths.length; i += 1) {
+        const p = _paths[i];
+        p.scale(v, opt);
+      }
+      //
+      this.refreshBox();
+      const box2 = this.box;
+      const x = box1.x - box2.x;
+      const y = box1.y - box2.y;
+      // console.log(box2, box1, x, y);
+      this.translate(x, y);
+      this.refreshBox();
+      bus.emit(Events.Refresh);
+    },
+    finishScale() {
+      for (let i = 0; i < _paths.length; i += 1) {
+        const p = _paths[i];
+        p.finishScale();
+      }
+    },
+    translate(x: number, y: number) {
+      for (let i = 0; i < _paths.length; i += 1) {
+        const p = _paths[i];
+        p.move({ x, y }, { directly: true, silence: true });
+      }
+    },
     append(path: LinePath) {
       _paths.push(path);
     },
@@ -233,6 +281,9 @@ export function Line(props: PathProps) {
       _$obj.handleMouseUp(pos);
     },
 
+    onRefresh(handler: Handler<TheTypesOfEvents[Events.Refresh]>) {
+      return bus.on(Events.Refresh, handler);
+    },
     onSelect(...args: Parameters<typeof _$obj.onSelect>) {
       return _$obj.onSelect(...args);
     },

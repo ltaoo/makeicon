@@ -459,6 +459,12 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       bus.emit(Events.Change, { ...state });
     },
     loadSVGContent,
+    scale() {
+      if (!$$canvas.object) {
+        return;
+      }
+      $$canvas.object.scale(0.5, { directly: true });
+    },
     onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
       return bus.on(Events.Change, handler);
     },
@@ -642,16 +648,26 @@ export const HomeIndexPage: ViewComponent = (props) => {
           </div>
           <div class="w-full h-[1px] my-4 bg-gray-200"></div>
           <div class="px-4">
+            <div>编辑</div>
+            <div class="mt-4">
+              <div
+                onClick={() => {
+                  $page.scale();
+                }}
+              >
+                缩放
+              </div>
+            </div>
+          </div>
+          <div class="w-full h-[1px] my-4 bg-gray-200"></div>
+          <div class="px-4">
             <div>预览</div>
             <div class="flex space-x-4 mt-4">
               <For each={page().icons}>
                 {(svg) => {
                   return (
                     <div class="flex flex-col items-center justify-center p-2 border rounded-md">
-                      <div
-                        style={{ width: svg.width, height: svg.height, "background-color": "#f2f2f2" }}
-                        innerHTML={svg.content}
-                      ></div>
+                      <div style={{ width: svg.width, height: svg.height }} innerHTML={svg.content}></div>
                       <div class="mt-2 text-center">{svg.text}</div>
                     </div>
                   );

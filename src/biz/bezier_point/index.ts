@@ -319,22 +319,31 @@ export function BezierPoint(props: BezierPointProps) {
       }
     },
     /** 移动指定距离 */
-    move(distance: { x: number; y: number }) {
-      _point.move({
-        x: distance.x,
-        y: distance.y,
-      });
-      if (_from) {
-        _from.move({
+    move(distance: { x: number; y: number }, options: Partial<{ directly: boolean; silence: boolean }> = {}) {
+      _point.move(
+        {
           x: distance.x,
           y: distance.y,
-        });
+        },
+        options
+      );
+      if (_from) {
+        _from.move(
+          {
+            x: distance.x,
+            y: distance.y,
+          },
+          options
+        );
       }
       if (_to) {
-        _to.move({
-          x: distance.x,
-          y: distance.y,
-        });
+        _to.move(
+          {
+            x: distance.x,
+            y: distance.y,
+          },
+          options
+        );
       }
     },
     finishMove(pos: { x: number; y: number }) {

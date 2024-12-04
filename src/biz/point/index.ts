@@ -5,9 +5,11 @@ import { base, Handler } from "@/domains/base";
 import { BezierPoint } from "@/biz/bezier_point";
 
 enum Events {
+  Change,
   Move,
 }
 type TheTypesOfEvents = {
+  [Events.Change]: { x: number; y: number };
   [Events.Move]: { x: number; y: number; dx: number; dy: number };
 };
 type PointProps = {
@@ -22,7 +24,7 @@ export enum PointType {
   Control,
 }
 export function Point(props: PointProps) {
-  const { x, y, type  } = props;
+  const { x, y, type } = props;
 
   let _x = x;
   let _y = y;
@@ -80,6 +82,28 @@ export function Point(props: PointProps) {
     //     bus.emit(Events.Move, { x, y, dx, dy });
     //   }
     // },
+    startScale() {
+      _start = {
+        x: _x,
+        y: _y,
+      };
+      console.log("[BIZ]point/index - start scale", _start);
+    },
+    scale(v: number, options: Partial<{ directly: boolean; silence: boolean }> = {}) {
+      // console.log("[BIZ]point/index - before scale", _x, _y);
+      if (!options.directly && _start) {
+        _x = _start.x * v;
+        _y = _start.y * v;
+      } else {
+        _x = _x * v;
+        _y = _y * v;
+      }
+      // console.log("[BIZ]point/index - after scale", _x, _y);
+      // bus.emit(Events.Change, { x: _x, y: _y });
+    },
+    finishScale() {
+      _start = null;
+    },
     setXY(pos: { x: number; y: number }) {
       const { x, y } = pos;
       _x = x;
@@ -103,13 +127,18 @@ export function Point(props: PointProps) {
         y: _y,
       };
     },
-    move(distance: { x: number; y: number }, options: Partial<{ silence: boolean }> = {}) {
+    move(distance: { x: number; y: number }, options: Partial<{ directly: boolean; silence: boolean }> = {}) {
       const { x, y } = distance;
       if (!_start) {
         return;
       }
-      _x = _start.x + x;
-      _y = _start.y + y;
+      if (options.directly) {
+        _x += x;
+        _y += y;
+      } else {
+        _x = _start.x + x;
+        _y = _start.y + y;
+      }
       if (options.silence) {
         return;
       }
@@ -120,6 +149,9 @@ export function Point(props: PointProps) {
     },
     onMove(handler: Handler<TheTypesOfEvents[Events.Move]>) {
       return bus.on(Events.Move, handler);
+    },
+    onChange(handler: Handler<TheTypesOfEvents[Events.Change]>) {
+      return bus.on(Events.Change, handler);
     },
   };
 }

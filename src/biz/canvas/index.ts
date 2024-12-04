@@ -98,13 +98,14 @@ export function Canvas(props: CanvasProps) {
         //   height: grid.height,
         //   colors: [{ step: 0, color: "white" }],
         // });
-        // $frame.drawTransparentBackground({
-        //   x: grid.x,
-        //   y: grid.y,
-        //   width: grid.width,
-        //   height: grid.height,
-        //   unit: 18,
-        // });
+        const unit = 16;
+        $frame.drawTransparentBackground({
+          x: grid.x,
+          y: grid.y,
+          width: grid.width,
+          height: grid.height,
+          unit,
+        });
       },
     }),
   };
@@ -120,7 +121,7 @@ export function Canvas(props: CanvasProps) {
     y: 0,
     width: 512,
     height: 512,
-    unit: 16,
+    unit: 512 / 28,
     lineWidth: 0.5,
     color: "#cccccc",
   };
@@ -381,6 +382,9 @@ export function Canvas(props: CanvasProps) {
         _cursor = v;
         bus.emit(Events.Change, { ..._state });
       });
+      line.onRefresh(() => {
+        bus.emit(Events.Refresh);
+      });
       // line.onDoubleClick(() => {
       //   bus.emit(Events.Refresh);
       // });
@@ -451,6 +455,12 @@ export function Canvas(props: CanvasProps) {
           return;
         }
         if (_cur_object) {
+          // 已经有选中的物体，但是又再次点击且没有点击到物体
+          if (_cursor === "right-bottom-edge") {
+            _cur_object.startScale();
+            _cur_object.cacheBox();
+            return;
+          }
           _cur_object.unselect();
           _cur_object = null;
         }
@@ -466,6 +476,14 @@ export function Canvas(props: CanvasProps) {
       _$pointer.handleMouseMove(pos);
       if (_$mode.value === "default.select") {
         if (_cur_object) {
+          if (_$pointer.pressing && _cursor === "right-bottom-edge") {
+            const w = pos.x - _cur_object.tmpBox.x;
+            const ww = _cur_object.tmpBox.x1 - _cur_object.tmpBox.x;
+            const scale = w / ww;
+            console.log(w, ww, scale);
+            _cur_object.scale(scale);
+            return;
+          }
           _cur_object.handleMouseMove(pos);
           return;
         }
@@ -480,6 +498,10 @@ export function Canvas(props: CanvasProps) {
       // const pos = toFixPoint(event);
       (() => {
         if (_cur_object) {
+          if (_cursor === "right-bottom-edge") {
+            _cur_object.finishScale();
+            _cur_object.clearBox();
+          }
           _cur_object.handleMouseUp(pos);
           // _cur_object = null;
           return;

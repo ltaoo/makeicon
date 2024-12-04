@@ -94,7 +94,6 @@ export function LinePath(props: BezierPathProps) {
     get path_points() {
       return _path_points;
     },
-    // 应该提供绘图的命令，而不是具体的实例
     get skeleton() {
       return _path_points;
     },
@@ -260,15 +259,15 @@ export function LinePath(props: BezierPathProps) {
       const end = point2;
       const segment = PathSegment({ start: start.point, end: end.point });
       _segments.push(segment);
-      console.log("[BIZ]path/index - createSegmentFromTwoPoint", {
-        start: `${start.x} ${start.y}`,
-        end: `${end.x} ${end.y}`,
-      });
+      // console.log("[BIZ]path/index - createSegmentFromTwoPoint", {
+      //   start: `${start.x} ${start.y}`,
+      //   end: `${end.x} ${end.y}`,
+      // });
       if (start.to && end.from) {
-        console.log("[BIZ]path/index - createSegmentFromTwoPoint controls", {
-          to: `${start.to.x} ${start.to.y}`,
-          from: `${end.from.x} ${end.from.y}`,
-        });
+        // console.log("[BIZ]path/index - createSegmentFromTwoPoint controls", {
+        //   to: `${start.to.x} ${start.to.y}`,
+        //   from: `${end.from.x} ${end.from.y}`,
+        // });
         segment.setControls(start.to, end.from);
       }
       segment.ensure();
@@ -311,16 +310,36 @@ export function LinePath(props: BezierPathProps) {
         point.startMove(pos);
       }
     },
-    move(distance: { x: number; y: number }) {
+    move(distance: { x: number; y: number }, options: Partial<{ directly: boolean; silence: boolean }> = {}) {
       for (let i = 0; i < _path_points.length; i += 1) {
         const point = _path_points[i];
-        point.move(distance);
+        point.move(distance, options);
       }
     },
     finishMove(pos: { x: number; y: number }) {
       for (let i = 0; i < _path_points.length; i += 1) {
         const point = _path_points[i];
         point.finishMove(pos);
+      }
+    },
+    startScale() {
+      for (let i = 0; i < _points.length; i += 1) {
+        const point = _points[i];
+        point.startScale();
+      }
+    },
+    scale(v: number, opt: Partial<{ directly: boolean }> = {}) {
+      // console.log("[BIZ]path/index - scale", v);
+      for (let i = 0; i < _points.length; i += 1) {
+        const point = _points[i];
+        point.scale(v, opt);
+      }
+      // bus.emit(Events.Change, { ..._state });
+    },
+    finishScale() {
+      for (let i = 0; i < _points.length; i += 1) {
+        const point = _points[i];
+        point.finishScale();
       }
     },
     get box() {
@@ -365,16 +384,6 @@ export function LinePath(props: BezierPathProps) {
     buildOutline(options: Partial<{ width: number; cap: LineCapType; scene: number }> = {}) {
       return buildOutlineFromPathPoints(_path_points, options);
     },
-    // buildCommands() {
-    //   const commands: {
-    //     c: string;
-    //     a: number[];
-    //     a2?: number[];
-    //     end: null | { x: number; y: number };
-    //     start: null | { x: number; y: number };
-    //   }[] = [];
-    //   for (let i = 0; i < _segments.length; i += 1) {}
-    // },
     buildCommands() {
       return buildCommandsFromPathPoints(_path_points);
     },

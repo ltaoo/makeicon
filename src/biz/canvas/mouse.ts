@@ -25,12 +25,6 @@ import { CanvasModeManage } from "./mode";
  */
 export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage }) {
   const { canvas: _$canvas, mode: _$mode } = props;
-  let _lines: Line[] = [];
-  let _paths = _lines.reduce((prev, cur) => {
-    return prev.concat(cur.paths);
-  }, [] as LinePath[]);
-  let _points: Point[] = [];
-  let _path_points: BezierPoint[] = [];
 
   /** 按下时的位置 */
   let _mx = 0;
@@ -50,20 +44,6 @@ export function CanvasPointer(props: { canvas: Canvas; mode: CanvasModeManage })
   let _timer2: null | NodeJS.Timer = null;
   let _click_count = 0;
   let _out_grid = true;
-
-  function updatePoints() {
-    const points: Point[] = [];
-    const path_points: BezierPoint[] = [];
-    for (let i = 0; i < _paths.length; i += 1) {
-      const path = _paths[i];
-      points.push(...path.points);
-      path_points.push(...path.path_points);
-    }
-    _points = points;
-    // console.log("_points count", _points.length);
-    _path_points = path_points;
-    // console.log("_path_points count", _path_points.length);
-  }
 
   enum Events {
     PointerDown,
