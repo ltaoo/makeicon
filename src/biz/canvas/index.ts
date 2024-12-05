@@ -17,6 +17,7 @@ import { PathEditing } from "./path_editing";
 import { CanvasObject } from "./object";
 import { GradientColorPicker } from "./gradient_picker";
 import { GradientColor } from "./gradient_color";
+import { isGradientColor } from "./utils";
 
 const debug = false;
 
@@ -82,36 +83,30 @@ export function Canvas(props: CanvasProps) {
     background: CanvasLayer({
       zIndex: 0,
       onMounted(layer) {
-        const $background = layer;
-        const grid = _grid;
-        const $path = $background.drawRoundedRect({
-          x: grid.x,
-          y: grid.y,
-          rx: 60,
-          ry: 60,
-          width: grid.width,
-          height: grid.height,
-          colors: [
-            { step: 0, color: "#ffa1ed" },
-            { step: 1, color: "#9147ff" },
-          ],
-        });
-        const line = Line({});
-        line.setFill({
-          color: "url(#background)",
-          opacity: 100,
-          visible: true,
-        });
-        _$shape = line;
-        line.append($path);
-        _lines.push(line);
-        // if (_gradients[0]) {
-        //   if (_$shape) {
-        //     console.log("[BIZ]canvas/index - before set Shape GradientColor");
-        //     _$shape.setFill({ color: "url(#background)", visible: true, opacity: 1 });
-        //   }
-        // }
-        bus.emit(Events.Refresh);
+        // const $background = layer;
+        // const grid = _grid;
+        // const $path = $background.drawRoundedRect({
+        //   x: grid.x,
+        //   y: grid.y,
+        //   rx: 60,
+        //   ry: 60,
+        //   width: grid.width,
+        //   height: grid.height,
+        //   colors: [
+        //     { step: 0, color: "#ffa1ed" },
+        //     { step: 1, color: "#9147ff" },
+        //   ],
+        // });
+        // const line = Line({});
+        // line.setFill({
+        //   color: "url(#background)",
+        //   opacity: 100,
+        //   visible: true,
+        // });
+        // _$shape = line;
+        // line.append($path);
+        // _lines.push(line);
+        // bus.emit(Events.Refresh);
       },
     }),
     frame: CanvasLayer({
@@ -446,13 +441,14 @@ export function Canvas(props: CanvasProps) {
           // console.log("[PAGE]home/index render $$canvas.paths", $$path.paths);
           for (let j = 0; j < $$path.paths.length; j += 1) {
             const $sub_path = $$path.paths[j];
+            console.log("[BIZ]canvas/index  - $path", $sub_path.clockwise);
             const commands = $sub_path.buildCommands();
             $graph_layer.save();
             for (let i = 0; i < commands.length; i += 1) {
-              const prev = commands[i - 1];
+              const prev_command = commands[i - 1];
               const command = commands[i];
               const next_command = commands[i + 1];
-              // console.log("[PAGE]command", command.c, command.a);
+              // console.log("[BIZ]canvas/index  - command", command.c, command.a);
               if (command.c === "M") {
                 const [x, y] = command.a;
                 // 这两个的顺序影响很大？？？？？如果开头是弧线，就不能使用 moveTo；其他情况都可以先 beginPath 再 moveTo
@@ -494,17 +490,18 @@ export function Canvas(props: CanvasProps) {
                 $pen_layer.closePath();
               }
             }
+            console.log("[BIZ]canvas/index - draw", state.fill.enabled, $sub_path.composite);
             if (state.fill.enabled && $sub_path.closed) {
               if ($sub_path.composite === "destination-out") {
                 $graph_layer.setGlobalCompositeOperation($sub_path.composite);
               }
               $graph_layer.setFillStyle(state.fill.color);
               // @todo 统一改成 Color 实例？GradientColor 是 Color 的一种？
-              if (typeof state.fill.color === "string" && state.fill.color.match(/url\(([^)]{1,})\)/)) {
-                const [_, id] = state.fill.color.match(/url\(#([^)]{1,})\)/)!;
-                const gradient = _gradients.find((g) => g.id === id);
+              const gradient_id = isGradientColor(state.fill.color);
+              if (typeof state.fill.color === "string" && gradient_id) {
+                const gradient = _gradients.find((g) => g.id === gradient_id);
                 if (gradient) {
-                  console.log("[BIZ]before $graph_layer.setFillStyle");
+                  console.log("[BIZ]canvas/index - draw before $graph_layer.setFillStyle");
                   $graph_layer.setFillStyle($graph_layer.getGradient(gradient));
                 }
               }
@@ -580,10 +577,10 @@ export function Canvas(props: CanvasProps) {
       return _$converter.buildWeappCode(_lines);
     },
     buildSVG() {
-      return _$converter.buildSVG(_lines);
+      return _$converter.buildSVG(_lines, { gradients: _gradients });
     },
     buildPreviewIcons() {
-      return _$converter.buildPreviewIcons(_lines, { background: _layers.background });
+      return _$converter.buildPreviewIcons(_lines, { gradients: _gradients, background: _layers.background });
     },
     update() {
       bus.emit(Events.Refresh);
@@ -636,13 +633,18 @@ export function Canvas(props: CanvasProps) {
             _cur_object.cacheBox();
             return;
           }
+          if (_cursor === "right-bottom-rotate") {
+            _cur_object.startRotate(pos);
+            _cur_object.cacheBox();
+            return;
+          }
           _cur_object.unselect();
           _cur_object = null;
         }
         if (_$gradient.active) {
           return;
         }
-        _$selection.startRangeSelect(pos);
+        // _$selection.startRangeSelect(pos);
       }
       if (_$mode.is("path_editing")) {
         _$path_editing.handleMouseDown(pos);
@@ -659,8 +661,12 @@ export function Canvas(props: CanvasProps) {
             const w = pos.x - _cur_object.tmpBox.x;
             const ww = _cur_object.tmpBox.x1 - _cur_object.tmpBox.x;
             const scale = w / ww;
-            console.log(w, ww, scale);
+            // console.log(w, ww, scale);
             _cur_object.scale(scale);
+            return;
+          }
+          if (_$pointer.pressing && _cursor === "right-bottom-rotate") {
+            _cur_object.rotate(pos);
             return;
           }
           _cur_object.handleMouseMove(pos);
@@ -682,6 +688,10 @@ export function Canvas(props: CanvasProps) {
         if (_cur_object) {
           if (_cursor === "right-bottom-edge") {
             _cur_object.finishScale();
+            _cur_object.clearBox();
+          }
+          if (_cursor === "right-bottom-rotate") {
+            _cur_object.finishRotate(pos);
             _cur_object.clearBox();
           }
           _cur_object.handleMouseUp(pos);
@@ -761,6 +771,9 @@ export function Canvas(props: CanvasProps) {
     bus.emit(Events.Change, { ..._state });
   });
   _$gradient.onRefresh(() => {
+    if (_$gradient.visible === false) {
+      return;
+    }
     const $path = _$gradient.$path;
     if ($path === null) {
       return;

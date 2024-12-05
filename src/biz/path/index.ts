@@ -72,6 +72,7 @@ export function LinePath(props: BezierPathProps) {
   let _cur_point: Point | null = null;
   /** 路径编辑相关状态 End ------------------ */
   let _closed = false;
+  /** 是否顺时针 */
   let _clockwise = true;
   let _composite = "source-over" as PathCompositeOperation;
   let _box = { x: 0, y: 0, x1: 0, y1: 0 };
@@ -111,6 +112,9 @@ export function LinePath(props: BezierPathProps) {
     },
     setClockWise(v: boolean) {
       _clockwise = v;
+      if (v === false) {
+        _composite = "destination-out";
+      }
     },
     get composite() {
       return _composite;
@@ -340,6 +344,24 @@ export function LinePath(props: BezierPathProps) {
       for (let i = 0; i < _points.length; i += 1) {
         const point = _points[i];
         point.finishScale();
+      }
+    },
+    startRotate() {
+      for (let i = 0; i < _points.length; i += 1) {
+        const point = _points[i];
+        point.startRotate();
+      }
+    },
+    rotate(pos: { x: number; y: number }, opt: { center: { x: number; y: number }; angle: number }) {
+      for (let i = 0; i < _points.length; i += 1) {
+        const point = _points[i];
+        point.rotate(pos, opt);
+      }
+    },
+    finishRotate(pos: { x: number; y: number }) {
+      for (let i = 0; i < _points.length; i += 1) {
+        const point = _points[i];
+        point.finishRotate(pos);
       }
     },
     get box() {

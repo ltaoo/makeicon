@@ -244,6 +244,7 @@ export function GradientColorPicker(props: GradientColorPickerProps) {
   let _center: { x: number; y: number } | null = null;
   let _mounted = false;
   let _active = false;
+  let _visible = false;
   let _d1: {
     points: { x: number; y: number }[];
     box: { x: number; y: number; x1: number; y1: number };
@@ -331,6 +332,9 @@ export function GradientColorPicker(props: GradientColorPickerProps) {
     get active() {
       return _active;
     },
+    get visible() {
+      return _visible;
+    },
     get norm() {
       return _normal;
     },
@@ -374,6 +378,9 @@ export function GradientColorPicker(props: GradientColorPickerProps) {
     },
 
     handleMouseDown(pos: { x: number; y: number }) {
+      if (_visible === false) {
+        return;
+      }
       if (!_start || !_end) {
         return;
       }
@@ -410,6 +417,9 @@ export function GradientColorPicker(props: GradientColorPickerProps) {
     },
     handleMousemove(pos: { x: number; y: number }) {
       //       console.log("[BIZ]canvas/gradient - handleMousemove", pos);
+      if (_visible === false) {
+        return;
+      }
       if (!_start || !_end) {
         return;
       }
@@ -468,6 +478,9 @@ export function GradientColorPicker(props: GradientColorPickerProps) {
       bus.emit(Events.Refresh);
     },
     handleMouseUp(pos: { x: number; y: number }) {
+      if (_visible === false) {
+        return;
+      }
       if (!_start || !_end) {
         return;
       }

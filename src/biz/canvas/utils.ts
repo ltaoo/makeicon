@@ -24,7 +24,9 @@ export function getAngle({ x: x1, y: y1 }: { x: number; y: number }, { x: x2, y:
   const dot = x1 * x2 + y1 * y2;
   const det = x1 * y2 - y1 * x2;
   const angle = (Math.atan2(det, dot) / Math.PI) * 180;
-  return (angle + 360) % 360;
+  // console.log((angle * 180) / Math.PI);
+  // return (angle + 360) % 360;
+  return angle;
 }
 
 /**
@@ -615,6 +617,9 @@ export function boxToRectShape(box: { x: number; y: number; x1: number; y1: numb
       x: (x1 - x) / 2 + x,
       y: (y1 - y) / 2 + y,
     },
+    width: x1 - x,
+    height: y1 - y,
+    angle: 0,
   } as RectShape;
 }
 
@@ -905,7 +910,250 @@ export function opentypeCommandsToTokens(
     return values.map(String);
   });
 }
+function processMCommand(
+  command: string,
+  values: number[],
+  options: {
+    i: number;
+    prev_start: { x: number; y: number };
+    process: {
+      normalizeX: (v: number) => number;
+      normalizeY: (v: number) => number;
+      /** 移动一个点 */
+      translate: (pos: { x: number; y: number }) => { x: number; y: number };
+      translateX: (v: number) => number;
+      translateY: (v: number) => number;
+    };
+  }
+) {
+  const { i, prev_start, process } = options;
+  let v0 = values[0];
+  let v1 = values[1];
+  let p = {
+    x: process.normalizeX(v0),
+    y: process.normalizeY(v1),
+  };
+  // let nextv0 = nextvalues[0];
+  // let nextv1 = nextvalues[1];
+  // let nextp = {
+  //   x: process.normalizeX(nextv0),
+  //   y: process.normalizeY(nextv1),
+  // };
+  if (command === "m") {
+    p.x += prev_start.x;
+    p.y += prev_start.y;
+    // nextp.x += p.x;
+    // nextp.y += p.y;
+    if (i === 0) {
+      p = process.translate(p);
+    }
+  } else {
+    p = process.translate(p);
+    // nextp = process.translate(nextp);
+  }
+  return p;
+}
+function processCCommand(
+  command: string,
+  values: number[],
+  options: {
+    i: number;
+    prev_start: { x: number; y: number };
+    process: {
+      normalizeX: (v: number) => number;
+      normalizeY: (v: number) => number;
+      /** 移动一个点 */
+      translate: (pos: { x: number; y: number }) => { x: number; y: number };
+      translateX: (v: number) => number;
+      translateY: (v: number) => number;
+    };
+  }
+) {
+  const next_command = command;
+  const next_values = values;
+  const { i, prev_start, process } = options;
+  const prev_point = prev_start;
+  function moveTo(p: { x: number; y: number }, extra: Partial<{ is_relative: boolean }> = {}) {
+    p.x += prev_point.x;
+    p.y += prev_point.y;
+  }
 
+  let v0 = next_values[0];
+  let v1 = next_values[1];
+  let v2 = next_values[2];
+  let v3 = next_values[3];
+  let v4 = next_values[4];
+  let v5 = next_values[5];
+  let a1 = {
+    x: process.normalizeX(v0),
+    y: process.normalizeY(v1),
+  };
+  let a2 = {
+    x: process.normalizeX(v4),
+    y: process.normalizeY(v5),
+  };
+  let a3 = {
+    x: process.normalizeX(v2),
+    y: process.normalizeY(v3),
+  };
+  if (["c"].includes(next_command)) {
+    moveTo(a1);
+    moveTo(a2);
+    moveTo(a3);
+  } else {
+    a1 = process.translate(a1);
+    a2 = process.translate(a2);
+    a3 = process.translate(a3);
+  }
+  return [a1, a2, a3];
+}
+function processVHCommand(
+  command: string,
+  values: number[],
+  options: {
+    i: number;
+    prev_start: { x: number; y: number };
+    process: {
+      normalizeX: (v: number) => number;
+      normalizeY: (v: number) => number;
+      /** 移动一个点 */
+      translate: (pos: { x: number; y: number }) => { x: number; y: number };
+      translateX: (v: number) => number;
+      translateY: (v: number) => number;
+    };
+  }
+) {
+  const next_command = command;
+  const next_values = values;
+  const { i, prev_start, process } = options;
+  const prev_point = prev_start;
+  let distance = (() => {
+    const v = next_values[0];
+    if (["H", "h"].includes(next_command)) {
+      return process.normalizeX(v);
+    }
+    if (["V", "v"].includes(next_command)) {
+      return process.normalizeY(v);
+    }
+    return v;
+  })();
+  let p = {
+    x: 0,
+    y: 0,
+  };
+  if (next_command === "H") {
+    p.x = process.translateX(distance);
+    p.y = prev_point.y;
+    // p = this.translate(p);
+  }
+  if (next_command === "V") {
+    p.x = prev_point.x;
+    p.y = process.translateY(distance);
+    // p = this.translate(p);
+  }
+  if (next_command === "h") {
+    distance += prev_point.x;
+    // p.x = this.translateX(distance);
+    p.x = distance;
+    p.y = prev_point.y;
+  }
+  if (next_command === "v") {
+    distance += prev_point.y;
+    p.x = prev_point.x;
+    // p.y = this.translateX(distance);
+    p.y = distance;
+  }
+  return p;
+}
+function processLCommand(
+  command: string,
+  values: number[],
+  options: {
+    i: number;
+    prev_start: { x: number; y: number };
+    process: {
+      normalizeX: (v: number) => number;
+      normalizeY: (v: number) => number;
+      /** 移动一个点 */
+      translate: (pos: { x: number; y: number }) => { x: number; y: number };
+      translateX: (v: number) => number;
+      translateY: (v: number) => number;
+    };
+  }
+) {
+  const next_command = command;
+  const next_values = values;
+  const { i, prev_start, process } = options;
+  const prev_point = prev_start;
+  function moveTo(p: { x: number; y: number }, extra: Partial<{ is_relative: boolean }> = {}) {
+    p.x += prev_point.x;
+    p.y += prev_point.y;
+  }
+
+  let v0 = next_values[0];
+  let v1 = next_values[1];
+  let p = {
+    x: process.normalizeX(v0),
+    y: process.normalizeY(v1),
+  };
+  if (["l"].includes(next_command)) {
+    // p = {
+    //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
+    //   y: this.normalizeY(v1, { ...xExtra, pureValue: true }),
+    // };
+    moveTo(p);
+  } else {
+    p = process.translate(p);
+  }
+  return p;
+}
+function processQCommand(
+  command: string,
+  values: number[],
+  options: {
+    i: number;
+    prev_start: { x: number; y: number };
+    process: {
+      normalizeX: (v: number) => number;
+      normalizeY: (v: number) => number;
+      /** 移动一个点 */
+      translate: (pos: { x: number; y: number }) => { x: number; y: number };
+      translateX: (v: number) => number;
+      translateY: (v: number) => number;
+    };
+  }
+) {
+  const next_command = command;
+  const next_values = values;
+  const { i, prev_start, process } = options;
+  const prev_point = prev_start;
+
+  function moveTo(p: { x: number; y: number }, extra: Partial<{ is_relative: boolean }> = {}) {
+    p.x += prev_point.x;
+    p.y += prev_point.y;
+  }
+
+  const v0 = next_values[0];
+  const v1 = next_values[1];
+  const v2 = next_values[2];
+  const v3 = next_values[3];
+  let a1 = {
+    x: process.normalizeX(v0),
+    y: process.normalizeY(v1),
+  };
+  let a2 = {
+    x: process.normalizeX(v2),
+    y: process.normalizeY(v3),
+  };
+  if (["q"].includes(next_command)) {
+    moveTo(a1);
+    moveTo(a2);
+  } else {
+    a1 = process.translate(a1);
+    a2 = process.translate(a2);
+  }
+  return [a1, a2];
+}
 /**
  * 将 SVG 标签，转换成项目内的路径对象
  */
@@ -939,47 +1187,74 @@ export function buildPath(
     const cur = tokens[i];
     const next = tokens[i + 1];
     const [command, ...args] = cur;
+    const [nextcommand, ...nextargs] = next || [];
     const values = args.map((v) => Number(v));
+    const nextvalues = nextargs.map((v) => Number(v));
     // console.log("cur command is", command);
     if (i === tokens.length - 1) {
       if (cur_path) {
         if (cur_path.checkIsClosed()) {
           cur_path.setClosed();
-          const clockwise = checkIsClockwise(cur_path.path_points);
-          cur_path.setClockWise(clockwise);
+          // const clockwise = checkIsClockwise(cur_path.path_points);
+          // cur_path.setClockWise(clockwise);
           // console.log("check is clockwise", clockwise);
         }
       }
     }
     if (["M", "m"].includes(command)) {
+      // console.log("[BIZ]canvas/utils - before checkIsClockwise1", values, cur_path);
       if (cur_path) {
         if (cur_path.path_points.length === 1) {
           // 如果路径只有一个 moveTo，就抛弃这个 path
-          //
         }
         if (cur_path.checkIsClosed()) {
           cur_path.setClosed();
-          const clockwise = checkIsClockwise(cur_path.path_points);
-          cur_path.setClockWise(clockwise);
-          // console.log("check is clockwise 2", clockwise);
+          // const clockwise = checkIsClockwise(cur_path.path_points);
+          // cur_path.setClockWise(clockwise);
         }
       }
-      let v0 = values[0];
-      let v1 = values[1];
-      let p = {
-        x: process.normalizeX(v0),
-        y: process.normalizeY(v1),
-      };
-      if (command === "m") {
-        // moveTo(p);
-        p.x += prev_start.x;
-        p.y += prev_start.y;
-        if (i === 0) {
-          p = process.translate(p);
+      const p = processMCommand(command, values, { i, prev_start, process });
+      // let v0 = values[0];
+      // let v1 = values[1];
+      // let p = {
+      //   x: process.normalizeX(v0),
+      //   y: process.normalizeY(v1),
+      // };
+      // let nextv0 = nextvalues[0];
+      // let nextv1 = nextvalues[1];
+      // let nextp = {
+      //   x: process.normalizeX(nextv0),
+      //   y: process.normalizeY(nextv1),
+      // };
+      // if (command === "m") {
+      //   p.x += prev_start.x;
+      //   p.y += prev_start.y;
+      //   nextp.x += p.x;
+      //   nextp.y += p.y;
+      //   if (i === 0) {
+      //     p = process.translate(p);
+      //   }
+      // } else {
+      //   p = process.translate(p);
+      //   nextp = process.translate(nextp);
+      // }
+      const nextp = (() => {
+        if (!next) {
+          return null;
         }
-      } else {
-        p = process.translate(p);
-      }
+        if (["V", "v", "H", "h"].includes(nextcommand)) {
+          return processVHCommand(nextcommand, nextvalues, { i, prev_start: p, process });
+        }
+        if (["L", "l"].includes(nextcommand)) {
+          return processLCommand(nextcommand, nextvalues, { i, prev_start: p, process });
+        }
+        if (["Q", "q"].includes(nextcommand)) {
+          const [a1] = processQCommand(nextcommand, nextvalues, { i, prev_start: p, process });
+          return a1;
+        }
+        return null;
+      })();
+      // console.log("[BIZ]canvas/utils - cur point and next point", p, nextp);
       Object.assign(prev_start, p);
       // console.log("[BIZ]before new start point", v0, v1, prev_point);
       prev_point = p;
@@ -999,6 +1274,12 @@ export function buildPath(
       const new_path = LinePath({
         points: [point],
       });
+      console.log("[BIZ]canvas/util - before check is clockwise", p, nextp, cur, next);
+      if (nextp && nextp.x > p.x) {
+        // 这里判断，如果下一个点在右侧，就必然是逆时针
+        console.log("[BIZ]canvas/util - path is not clockwise", p, nextp);
+        new_path.setClockWise(false);
+      }
       path.append(new_path);
       if (cur_path) {
         // const cur_size = new_path.size;
@@ -1050,8 +1331,8 @@ export function buildPath(
       }
       if (cur_path) {
         cur_path.setClosed();
-        const clockwise = checkIsClockwise(cur_path.path_points);
-        cur_path.setClockWise(clockwise);
+        // const clockwise = checkIsClockwise(cur_path.path_points);
+        // cur_path.setClockWise(clockwise);
         // console.log("check is clockwise 3", clockwise);
       }
       // cur_path.setClosed();
@@ -1071,8 +1352,8 @@ export function buildPath(
         } else {
           p2 = process.translate(p2);
         }
-        prev_point = p2;
         const start = p1;
+        prev_point = p2;
         const arc = {
           rx: radius,
           ry: radius,
@@ -1113,7 +1394,6 @@ export function buildPath(
           inner_cur_path_point = new_cur_path_point;
           cur_path.appendPoint(new_cur_path_point);
         }
-
         // const is_reverse = p1.x > p2.x;
         // const distance = distanceOfPoints(p1, p2);
         // if (radius < distance / 2) {
@@ -1177,21 +1457,7 @@ export function buildPath(
         // }
       }
       if (["L", "l"].includes(next_command)) {
-        let v0 = next_values[0];
-        let v1 = next_values[1];
-        let p = {
-          x: process.normalizeX(v0),
-          y: process.normalizeY(v1),
-        };
-        if (["l"].includes(next_command)) {
-          // p = {
-          //   x: this.normalizeX(v0, { ...xExtra, pureValue: true }),
-          //   y: this.normalizeY(v1, { ...xExtra, pureValue: true }),
-          // };
-          moveTo(p);
-        } else {
-          p = process.translate(p);
-        }
+        const p = processLCommand(next_command, next_values, { i, prev_start: prev_point, process });
         prev_point = p;
         // console.log("create point", next_command, next, next_values, p);
         const next_path_point = BezierPoint({
@@ -1208,42 +1474,7 @@ export function buildPath(
         cur_path.appendPoint(next_path_point);
       }
       if (["V", "v", "H", "h"].includes(next_command)) {
-        let distance = (() => {
-          const v = next_values[0];
-          if (["H", "h"].includes(next_command)) {
-            return process.normalizeX(v);
-          }
-          if (["V", "v"].includes(next_command)) {
-            return process.normalizeY(v);
-          }
-          return v;
-        })();
-        let p = {
-          x: 0,
-          y: 0,
-        };
-        if (next_command === "H") {
-          p.x = process.translateX(distance);
-          p.y = prev_point.y;
-          // p = this.translate(p);
-        }
-        if (next_command === "V") {
-          p.x = prev_point.x;
-          p.y = process.translateY(distance);
-          // p = this.translate(p);
-        }
-        if (next_command === "h") {
-          distance += prev_point.x;
-          // p.x = this.translateX(distance);
-          p.x = distance;
-          p.y = prev_point.y;
-        }
-        if (next_command === "v") {
-          distance += prev_point.y;
-          p.x = prev_point.x;
-          // p.y = this.translateX(distance);
-          p.y = distance;
-        }
+        const p = processVHCommand(next_command, next_values, { i, prev_start: prev_point, process });
         prev_point = p;
         // console.log("create point", next_command, next, next_values, p);
         const next_path_point = BezierPoint({
@@ -1260,33 +1491,7 @@ export function buildPath(
         cur_path.appendPoint(next_path_point);
       }
       if (["C", "c"].includes(next_command)) {
-        let v0 = next_values[0];
-        let v1 = next_values[1];
-        let v2 = next_values[2];
-        let v3 = next_values[3];
-        let v4 = next_values[4];
-        let v5 = next_values[5];
-        let a1 = {
-          x: process.normalizeX(v0),
-          y: process.normalizeY(v1),
-        };
-        let a2 = {
-          x: process.normalizeX(v4),
-          y: process.normalizeY(v5),
-        };
-        let a3 = {
-          x: process.normalizeX(v2),
-          y: process.normalizeY(v3),
-        };
-        if (["c"].includes(next_command)) {
-          moveTo(a1);
-          moveTo(a2);
-          moveTo(a3);
-        } else {
-          a1 = process.translate(a1);
-          a2 = process.translate(a2);
-          a3 = process.translate(a3);
-        }
+        const [a1, a2, a3] = processCCommand(next_command, next_values, { i, prev_start: prev_point, process });
         prev_point = a2;
         if (cur_path_point) {
           // 这里 cur_path_point 其实是 prev_path_point ？？？
@@ -1370,25 +1575,7 @@ export function buildPath(
         }
       }
       if (["Q", "q"].includes(next_command)) {
-        const v0 = next_values[0];
-        const v1 = next_values[1];
-        const v2 = next_values[2];
-        const v3 = next_values[3];
-        let a1 = {
-          x: process.normalizeX(v0),
-          y: process.normalizeY(v1),
-        };
-        let a2 = {
-          x: process.normalizeX(v2),
-          y: process.normalizeY(v3),
-        };
-        if (["q"].includes(next_command)) {
-          moveTo(a1);
-          moveTo(a2);
-        } else {
-          a1 = process.translate(a1);
-          a2 = process.translate(a2);
-        }
+        const [a1, a2] = processQCommand(next_command, next_values, { i, prev_start: prev_point, process });
         prev_point = a2;
         const next_path_point = BezierPoint({
           point: Point({
@@ -1520,4 +1707,13 @@ export function calcMinAndMaxPoint(p1: { x: number; y: number }, p2: { x: number
     range.max.y = p1.y;
   }
   return range;
+}
+
+export function isGradientColor(color: string) {
+  const r = color.match(/url\(#([^)]{1,})\)/);
+  if (!r) {
+    return null;
+  }
+  const [_, id] = color.match(/url\(#([^)]{1,})\)/)!;
+  return id;
 }

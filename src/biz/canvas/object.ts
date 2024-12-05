@@ -85,6 +85,8 @@ export function CanvasObject(props: CanvasObjectProps) {
     x: 0,
     y: 0,
   };
+  /** 旋转角度 */
+  let _rotateAngle = 0;
   const _state = {
     get selected() {
       return _selected;
@@ -129,6 +131,12 @@ export function CanvasObject(props: CanvasObjectProps) {
     },
     updateClient(shape: RectShape) {
       _client = shape;
+    },
+    get center() {
+      return _rotateCenter;
+    },
+    get angle() {
+      return _rotateAngle;
     },
     buildEdgeOfBox() {
       const extra = _tmpClient;
@@ -516,12 +524,15 @@ export function CanvasObject(props: CanvasObjectProps) {
         x: left + width / 2,
         y: top + height / 2,
       };
+      _initialX = x;
+      _initialY = y;
       const startVector = {
         x: x - center.x,
         y: y - center.y,
       };
       _rotateStartVector = startVector;
       _rotateCenter = center;
+      _rotateAngle = 0;
       _pressing = true;
     },
     rotate(options: { x: number; y: number }) {
@@ -535,23 +546,38 @@ export function CanvasObject(props: CanvasObjectProps) {
         x: x - center.x,
         y: y - center.y,
       };
-      const relativeAngle = getAngle(_rotateStartVector, rotateVector);
+      /** 点积 */
+      const dot = _rotateStartVector.x * rotateVector.x + _rotateStartVector.y * rotateVector.y;
+      const l1 = Math.sqrt(_rotateStartVector.x * _rotateStartVector.x + _rotateStartVector.y * _rotateStartVector.y);
+      const l2 = Math.sqrt(rotateVector.x * rotateVector.x + rotateVector.y * rotateVector.y);
+      const cosTheta = dot / (l1 * l2);
+      const angleRad = Math.acos(cosTheta);
+      const angle2 = angleRad;
+      const crossProduct = _rotateStartVector.x * rotateVector.y - _rotateStartVector.y * rotateVector.x;
+      // const angle2 = angleRad * (180 / Math.PI);
+      console.log("angle 2", angle2, angle2 * (180 / Math.PI), crossProduct);
+      // const relativeAngle = getAngle(_rotateStartVector, rotateVector);
+      const relativeAngle = crossProduct > 0 ? angle2 : -angle2;
       const startAngle = _client.angle;
-      let rotateAngle = Math.round(relativeAngle + startAngle);
-      if (rotateAngle >= 360) {
-        rotateAngle -= 360;
-      } else if (rotateAngle < 0) {
-        rotateAngle += 360;
-      }
-      if (rotateAngle > 356 || rotateAngle < 4) {
-        rotateAngle = 0;
-      } else if (rotateAngle > 86 && rotateAngle < 94) {
-        rotateAngle = 90;
-      } else if (rotateAngle > 176 && rotateAngle < 184) {
-        rotateAngle = 180;
-      } else if (rotateAngle > 266 && rotateAngle < 274) {
-        rotateAngle = 270;
-      }
+      // let rotateAngle = Math.round(relativeAngle + startAngle);
+      let rotateAngle = relativeAngle + startAngle;
+      console.log("[BIZ]canvas/object - rotate rotateAngle is", relativeAngle, startAngle, rotateAngle);
+      // if (rotateAngle >= 360) {
+      //   rotateAngle -= 360;
+      // } else if (rotateAngle < 0) {
+      //   rotateAngle += 360;
+      // }
+      // if (rotateAngle > 356 || rotateAngle < 4) {
+      //   rotateAngle = 0;
+      // } else if (rotateAngle > 86 && rotateAngle < 94) {
+      //   rotateAngle = 90;
+      // } else if (rotateAngle > 176 && rotateAngle < 184) {
+      //   rotateAngle = 180;
+      // } else if (rotateAngle > 266 && rotateAngle < 274) {
+      //   rotateAngle = 270;
+      // }
+      _rotateAngle = rotateAngle;
+      // console.log("[BIZ]canvas/object - rotate rotateAngle is", rotateAngle);
       _tmpClient = this.completeRect({
         ..._client,
         angle: rotateAngle,

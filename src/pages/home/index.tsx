@@ -40,6 +40,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
   }
 
   function loadSVGContent(content: string) {
+    console.log("[PAGE]home/index - loadSVGContent", content);
     const result = $$canvas.buildBezierPathsFromPathString(content);
     if (result === null) {
       app.tip({
@@ -48,7 +49,7 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       return;
     }
     const { dimensions, gradients, paths } = result;
-    $$canvas.saveGradients(gradients);
+    // $$canvas.saveGradients(gradients);
     $$canvas.appendObjects(paths, { transform: true, dimensions });
     $$canvas.draw();
     preview();
@@ -142,8 +143,8 @@ function HomeIndexPageCore(props: ViewComponentProps) {
         return;
       }
       console.log(svg);
-      const blob = new Blob([svg], { type: "image/svg+xml" });
-      saveAs(blob, "icon.svg");
+      // const blob = new Blob([svg], { type: "image/svg+xml" });
+      // saveAs(blob, "icon.svg");
     },
   });
   const $downloadPNG = new ButtonCore({

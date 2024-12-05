@@ -87,7 +87,7 @@ export function Point(props: PointProps) {
         x: _x,
         y: _y,
       };
-      console.log("[BIZ]point/index - start scale", _start);
+      // console.log("[BIZ]point/index - start scale", _start);
     },
     scale(v: number, options: Partial<{ directly: boolean; silence: boolean }> = {}) {
       // console.log("[BIZ]point/index - before scale", _x, _y);
@@ -104,6 +104,36 @@ export function Point(props: PointProps) {
     finishScale() {
       _start = null;
     },
+    startRotate() {
+      _start = {
+        x: _x,
+        y: _y,
+      };
+    },
+    rotate(pos: { x: number; y: number }, opt: { center: { x: number; y: number }; angle: number }) {
+      const { center, angle } = opt;
+      if (!_start) {
+        return;
+      }
+      const a = (angle * 180) / Math.PI;
+      const x = _start.x - center.x;
+      const y = _start.y - center.y;
+      // _x = x * Math.cos(a) - y * Math.sin(a) + center.x;
+      // _y = x * Math.sin(a) + y * Math.cos(a) + center.y;
+      _x = x * Math.cos(angle) - y * Math.sin(angle) + center.x;
+      _y = x * Math.sin(angle) + y * Math.cos(angle) + center.y;
+      // const cos = Math.cos(angle);
+      // const sin = Math.sin(angle);
+      // // 平移到原点
+      // const translatedX = _start.x - center.x;
+      // const translatedY = _start.y - center.y;
+      // // 旋转
+      // const rotatedX = translatedX * cos - translatedY * sin;
+      // const rotatedY = translatedX * sin + translatedY * cos;
+      // _x = rotatedX + center.x;
+      // _y = rotatedY + center.y;
+    },
+    finishRotate(pos: { x: number; y: number }) {},
     setXY(pos: { x: number; y: number }) {
       const { x, y } = pos;
       _x = x;

@@ -18,9 +18,10 @@ import { Line } from "@/biz/line";
 import { objectToHTML } from "@/utils";
 import { PathParser } from "@/biz/svg/path-parser";
 
-import { buildPath, opentypeCommandsToTokens } from "./utils";
+import { buildPath, isGradientColor, opentypeCommandsToTokens } from "./utils";
 import { CanvasLayer } from "./layer";
 import { v } from "vitest/dist/types-e3c9754d";
+import { GradientColor } from "./gradient_color";
 
 let debug = false;
 
@@ -192,6 +193,7 @@ export function CanvasConverter(props: {
         width: number;
         height: number;
         background: CanvasLayer;
+        gradients: GradientColor[];
       }> = {}
     ) {
       const { background } = options;
@@ -211,6 +213,7 @@ export function CanvasConverter(props: {
       if (arr.length === 0) {
         return null;
       }
+      const gradients: Record<string, Record<string, any>> = {};
       const paths: Record<string, string>[] = arr.map((d, i) => {
         const data: {
           id: string;
@@ -228,6 +231,28 @@ export function CanvasConverter(props: {
         };
         if (d.fill.enabled) {
           data.fill = d.fill.color;
+          const gradient_id = isGradientColor(d.fill.color);
+          if (gradient_id && options.gradients) {
+            const matched = options.gradients.find((g) => g.id === gradient_id);
+            if (matched) {
+              gradients[gradient_id] = {
+                id: matched.id,
+                tag: "linearGradient",
+                x1: `${((matched.x1 - _grid.x) / size.width) * 100}%`,
+                y1: `${((matched.y1 - _grid.y) / size.height) * 100}%`,
+                x2: `${((matched.x2 - _grid.x) / size.width) * 100}%`,
+                y2: `${((matched.y2 - _grid.y) / size.height) * 100}%`,
+                children: matched.stops.map((stop) => {
+                  return {
+                    id: "",
+                    tag: "stop",
+                    offset: `${stop.offset * 100}%`,
+                    style: `stop-color: ${stop.color};`,
+                  };
+                }),
+              };
+            }
+          }
         }
         if (d.stroke.enabled) {
           data.stroke = d.stroke.color;
@@ -253,7 +278,13 @@ export function CanvasConverter(props: {
         class: "icon",
         version: "1.1",
         fill: "none",
-        children: paths,
+        children: [
+          {
+            id: "",
+            tag: "defs",
+            children: Object.values(gradients),
+          } as Record<string, any>,
+        ].concat(paths),
       };
       // path.fill = "#111111";
       // const svg = `<svg viewBox="0 0 ${box.width} ${box.height}" width="${size.width}" height="${size.height}" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" class="icon" version="1.1"><g class="layer">`;
@@ -264,7 +295,13 @@ export function CanvasConverter(props: {
     },
     buildSVG(
       lines: Line[],
-      options: Partial<{ cap: LineCapType; join: LineJoinType; width: number; height: number }> = {}
+      options: Partial<{
+        gradients: GradientColor[];
+        cap: LineCapType;
+        join: LineJoinType;
+        width: number;
+        height: number;
+      }> = {}
     ) {
       const r = this.buildSVGJSON(lines, options);
       if (!r) {
@@ -283,7 +320,7 @@ export function CanvasConverter(props: {
       return template;
     },
     /** 构建多种尺寸的 icon 用于预览 */
-    buildPreviewIcons(lines: Line[], opt: { background: CanvasLayer }) {
+    buildPreviewIcons(lines: Line[], opt: { gradients: GradientColor[]; background: CanvasLayer }) {
       const svg = this.buildSVGJSON(lines, opt);
       if (!svg) {
         return [];
