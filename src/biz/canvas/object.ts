@@ -555,13 +555,13 @@ export function CanvasObject(props: CanvasObjectProps) {
       const angle2 = angleRad;
       const crossProduct = _rotateStartVector.x * rotateVector.y - _rotateStartVector.y * rotateVector.x;
       // const angle2 = angleRad * (180 / Math.PI);
-      console.log("angle 2", angle2, angle2 * (180 / Math.PI), crossProduct);
+      // console.log("angle 2", angle2, angle2 * (180 / Math.PI), crossProduct);
       // const relativeAngle = getAngle(_rotateStartVector, rotateVector);
       const relativeAngle = crossProduct > 0 ? angle2 : -angle2;
       const startAngle = _client.angle;
       // let rotateAngle = Math.round(relativeAngle + startAngle);
       let rotateAngle = relativeAngle + startAngle;
-      console.log("[BIZ]canvas/object - rotate rotateAngle is", relativeAngle, startAngle, rotateAngle);
+      // console.log("[BIZ]canvas/object - rotate rotateAngle is", relativeAngle, startAngle, rotateAngle);
       // if (rotateAngle >= 360) {
       //   rotateAngle -= 360;
       // } else if (rotateAngle < 0) {
@@ -589,6 +589,7 @@ export function CanvasObject(props: CanvasObjectProps) {
     endRotate() {
       const { onEndRotate, onEndPress } = _options;
       _pressing = false;
+      _rotating = false;
       if (onEndPress) {
         onEndPress();
       }

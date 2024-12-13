@@ -65,6 +65,9 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.5
         version: 1.0.5(tailwindcss@3.3.1(postcss@8.4.21))
+      tinycolor2:
+        specifier: ^1.6.0
+        version: 1.6.0
       url-parse:
         specifier: ^1.5.10
         version: 1.5.10
@@ -84,6 +87,9 @@ importers:
       '@types/qs':
         specifier: ^6.9.7
         version: 6.9.7
+      '@types/tinycolor2':
+        specifier: ^1.4.6
+        version: 1.4.6
       '@types/url-parse':
         specifier: ^1.4.8
         version: 1.4.8
@@ -625,6 +631,9 @@ packages:
 
   '@types/qs@6.9.7':
     resolution: {integrity: sha512-FGa1F62FT09qcrueBA6qYTrJPVDzah9a+493+o2PCXsesWHIn27G98TsSMs3WPNbZIEj4+VJf6saSFpvD+3Zsw==}
+
+  '@types/tinycolor2@1.4.6':
+    resolution: {integrity: sha512-iEN8J0BoMnsWBqjVbWH/c0G0Hh7O21lpR2/+PrvAVgWdzL7eexIFm4JN/Wn10PTcmNdtS6U67r499mlWMXOxNw==}
 
   '@types/url-parse@1.4.8':
     resolution: {integrity: sha512-zqqcGKyNWgTLFBxmaexGUKQyWqeG7HjXj20EuQJSJWwXe54BjX0ihIo5cJB9yAQzH8dNugJ9GvkBYMjPXs/PJw==}
@@ -1478,6 +1487,9 @@ packages:
   tinybench@2.4.0:
     resolution: {integrity: sha512-iyziEiyFxX4kyxSp+MtY1oCH/lvjH3PxFN8PGCDeqcZWAJ/i+9y+nL85w99PxVzrIvew/GSkSbDYtiGVa85Afg==}
 
+  tinycolor2@1.6.0:
+    resolution: {integrity: sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw==}
+
   tinypool@0.4.0:
     resolution: {integrity: sha512-2ksntHOKf893wSAH4z/+JbPpi92esw8Gn9N2deXX+B0EO92hexAVI9GIZZPx7P5aYo5KULfeOSt3kMOmSOy6uA==}
     engines: {node: '>=14.0.0'}
@@ -2117,6 +2129,8 @@ snapshots:
   '@types/opentype.js@1.3.8': {}
 
   '@types/qs@6.9.7': {}
+
+  '@types/tinycolor2@1.4.6': {}
 
   '@types/url-parse@1.4.8': {}
 
@@ -2989,6 +3003,8 @@ snapshots:
   tiny-inflate@1.0.3: {}
 
   tinybench@2.4.0: {}
+
+  tinycolor2@1.6.0: {}
 
   tinypool@0.4.0: {}
 

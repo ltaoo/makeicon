@@ -133,7 +133,9 @@ export function Point(props: PointProps) {
       // _x = rotatedX + center.x;
       // _y = rotatedY + center.y;
     },
-    finishRotate(pos: { x: number; y: number }) {},
+    finishRotate(pos: { x: number; y: number }) {
+      _start = null;
+    },
     setXY(pos: { x: number; y: number }) {
       const { x, y } = pos;
       _x = x;

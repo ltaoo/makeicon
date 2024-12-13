@@ -114,6 +114,10 @@ function HomeIndexPageCore(props: ViewComponentProps) {
       if (!$$canvas.object) {
         return;
       }
+      if ($$canvas.object.fill.color === values.color) {
+        return;
+      }
+      console.log("[PAGE]home/index - handle $fill change", values, $$canvas.object);
       $$canvas.object.setFill(values);
       $$canvas.draw();
       preview();
@@ -121,10 +125,13 @@ function HomeIndexPageCore(props: ViewComponentProps) {
   });
   const $stroke = ColorInputCore({
     onChange(values) {
-      console.log("[PAGE]home/index - handle $stroke change", values, $$canvas.object);
       if (!$$canvas.object) {
         return;
       }
+      if ($$canvas.object.stroke.color === values.color) {
+        return;
+      }
+      console.log("[PAGE]home/index - handle $stroke change", values, $$canvas.object);
       $$canvas.object.setStroke(values);
       $$canvas.draw();
     },
@@ -466,7 +473,7 @@ export const HomeIndexPage: ViewComponent = (props) => {
         </div>
       </Show>
       <div class="fixed right-[48px] top-[24px] bottom-[24px] overflow-y-auto" style={{ "z-index": 9999 }}>
-        <div class="h-full border rounded-xl rounded-xl bg-white">
+        <div class="h-full w-[268px] border rounded-xl rounded-xl bg-white">
           <div>
             <div class="flex justify-between mt-4 px-4">
               <div>填充</div>

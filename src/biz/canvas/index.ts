@@ -441,7 +441,7 @@ export function Canvas(props: CanvasProps) {
           // console.log("[PAGE]home/index render $$canvas.paths", $$path.paths);
           for (let j = 0; j < $$path.paths.length; j += 1) {
             const $sub_path = $$path.paths[j];
-            console.log("[BIZ]canvas/index  - $path", $sub_path.clockwise);
+            // console.log("[BIZ]canvas/index  - $path", $sub_path.clockwise);
             const commands = $sub_path.buildCommands();
             $graph_layer.save();
             for (let i = 0; i < commands.length; i += 1) {
@@ -490,7 +490,7 @@ export function Canvas(props: CanvasProps) {
                 $pen_layer.closePath();
               }
             }
-            console.log("[BIZ]canvas/index - draw", state.fill.enabled, $sub_path.composite);
+            // console.log("[BIZ]canvas/index - draw", state.fill.enabled, $sub_path.composite);
             if (state.fill.enabled && $sub_path.closed) {
               if ($sub_path.composite === "destination-out") {
                 $graph_layer.setGlobalCompositeOperation($sub_path.composite);
@@ -501,7 +501,7 @@ export function Canvas(props: CanvasProps) {
               if (typeof state.fill.color === "string" && gradient_id) {
                 const gradient = _gradients.find((g) => g.id === gradient_id);
                 if (gradient) {
-                  console.log("[BIZ]canvas/index - draw before $graph_layer.setFillStyle");
+                  // console.log("[BIZ]canvas/index - draw before $graph_layer.setFillStyle");
                   $graph_layer.setFillStyle($graph_layer.getGradient(gradient));
                 }
               }

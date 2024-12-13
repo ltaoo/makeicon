@@ -265,7 +265,6 @@ export function Line(props: PathProps) {
         const p = _paths[i];
         p.rotate(pos, { center: _$obj.center, angle: _$obj.angle });
       }
-      // this.refreshBox();
       bus.emit(Events.Refresh);
     },
     finishRotate(pos: { x: number; y: number }) {
@@ -273,6 +272,8 @@ export function Line(props: PathProps) {
         const p = _paths[i];
         p.finishRotate(pos);
       }
+      this.refreshBox();
+      bus.emit(Events.Refresh);
     },
     translate(x: number, y: number) {
       for (let i = 0; i < _paths.length; i += 1) {

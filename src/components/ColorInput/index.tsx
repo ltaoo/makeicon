@@ -3,6 +3,7 @@ import { Eye, EyeOff, LucideEqualNot } from "lucide-solid";
 
 import { ColorInputCore } from "@/biz/color_input";
 import { Input } from "@/components/ui";
+import { SketchColorPicker } from "./sketch";
 
 export function ColorInput(props: { store: ColorInputCore }) {
   const { store } = props;
@@ -12,15 +13,17 @@ export function ColorInput(props: { store: ColorInputCore }) {
 
   return (
     <div class="flex items-center space-x-4">
-      <div class="flex items-center space-x-2">
-        <input
-          value={state().color}
+      {/* <div class="flex items-center space-x-2">
+        <div
+          style={{ "background-color": state().color }}
           class="border-0 p-0 w-[24px] h-[24px]"
-          type="color"
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            store.$input.setValue(value);
+          onClick={() => {
+            store.showColorPicker();
           }}
+          // onChange={(event) => {
+          //   const value = event.currentTarget.value;
+          //   store.$input.setValue(value);
+          // }}
         />
         <input
           value={state().color}
@@ -64,7 +67,8 @@ export function ColorInput(props: { store: ColorInputCore }) {
         >
           <LucideEqualNot class="w-4 h-4" />
         </div>
-      </div>
+      </div> */}
+      <SketchColorPicker store={store} />
     </div>
   );
 }
